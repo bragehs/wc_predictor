@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:www.fifa.com)",
+      "WebFetch(domain:en.wikipedia.org)",
+      "WebFetch(domain:www.nbcsports.com)",
+      "WebFetch(domain:worldcuplocaltime.com)",
+      "WebFetch(domain:www.squawka.com)",
+      "WebFetch(domain:sports.yahoo.com)",
+      "WebFetch(domain:www.espn.com)",
+      "WebFetch(domain:www.bracketsninja.com)",
+      "WebFetch(domain:www.bbc.com)",
+      "WebFetch(domain:www.theguardian.com)",
+      "WebFetch(domain:sportmonks.com)",
+      "Bash(npm run *)",
+      "Bash(node -e ' *)"
+    ]
+  }
+}
