@@ -1,18 +1,13 @@
 // ── Scoring ──────────────────────────────────────────────────────────────────
 export const SCORING = {
-  exactScore: 3,
-  correctOutcome: 1,
-  bonusQuestion: 5,
+  correctOutcome: 1,   // per group match (H/U/B)
+  tablePosition: 2,    // per correct group table position
 };
 
-// ── Bonus Questions ───────────────────────────────────────────────────────────
+// ── Bonus Questions (each has own pts) ───────────────────────────────────────
 export const BONUS_QUESTIONS = [
-  { id: "winner",         label: "Tournament Winner" },
-  { id: "golden_boot",   label: "Golden Boot (Top Scorer)" },
-  { id: "best_player",   label: "Best Player (Golden Ball)" },
-  { id: "top_upset",     label: "Biggest Surprise Qualifier (Group Stage)" },
-  { id: "first_out",     label: "First Team Eliminated" },
-  { id: "top_scorer",    label: "Number of goals by top scorer" },
+  { id: "winner",     label: "Tournament Winner (Vir)",     pts: 30 },
+  { id: "top_scorer", label: "Top Scorer (Toppscorer)",     pts: 10 },
 ];
 
 // ── Players ───────────────────────────────────────────────────────────────────
@@ -45,13 +40,13 @@ export const PLAYER_EMOJIS = [
 // ── Knockout scoring (pts per correct winner prediction, per round) ───────────
 export const KNOCKOUT_SCORING = {
   R32:   2,
-  R16:   4,
-  QF:    6,
+  R16:   2,
+  QF:    5,
   SF:    10,
-  Final: 15,
+  Final: 20,
 };
 
 // ── UI ────────────────────────────────────────────────────────────────────────
 export const TABS = ["Setup", "Predictions", "Results", "Bracket", "Standings"];
 
-export const STORAGE_KEY = "wc2026_v3";
+export const STORAGE_KEY = "wc2026_v4";

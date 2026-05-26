@@ -16,9 +16,32 @@ export function calcGroupStandings(group, teams, results) {
     else if (h < a) { pts[m.away] += 3; w[m.away]++; l[m.home]++; }
     else            { pts[m.home]++; pts[m.away]++; d[m.home]++; d[m.away]++; }
   });
+  const tb = results.tiebreakers?.[group] || {};
   return teams
     .map(t => ({ team:t, pts:pts[t], gf:gf[t], ga:ga[t], gd:gf[t]-ga[t], w:w[t], d:d[t], l:l[t] }))
-    .sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
+    .sort((a, b) =>
+      b.pts - a.pts ||
+      b.gd - a.gd ||
+      b.gf - a.gf ||
+      ((tb.yellowCards?.[a.team] ?? 999) - (tb.yellowCards?.[b.team] ?? 999)) ||
+      ((tb.fifaRankings?.[a.team] ?? 999) - (tb.fifaRankings?.[b.team] ?? 999))
+    );
+}
+
+// Returns standings from H/U/B outcome predictions (no goals)
+export function calcGroupStandingsFromOutcomes(group, teams, outcomes) {
+  const pts={}, w={}, d={}, l={};
+  teams.forEach(t => { pts[t]=0; w[t]=0; d[t]=0; l[t]=0; });
+  GROUP_MATCHES.filter(m => m.group===group).forEach(m => {
+    const o = outcomes?.[m.id];
+    if (!o) return;
+    if (o==="H")      { pts[m.home]+=3; w[m.home]++; l[m.away]++; }
+    else if (o==="A") { pts[m.away]+=3; w[m.away]++; l[m.home]++; }
+    else if (o==="D") { pts[m.home]++; pts[m.away]++; d[m.home]++; d[m.away]++; }
+  });
+  return teams
+    .map(t => ({ team:t, pts:pts[t], w:w[t], d:d[t], l:l[t] }))
+    .sort((a,b) => b.pts - a.pts);
 }
 
 // Returns { A: { first, second, third }, B: ... }
@@ -26,7 +49,7 @@ export function getQualifiers(results) {
   const out = {};
   Object.entries(GROUPS).forEach(([g, teams]) => {
     const s = calcGroupStandings(g, teams, results);
-    out[g] = { first: s[0].team, second: s[1].team, third: s[2].team, row: s[2] };
+    out[g] = { first: s[0]?.team || `${g}1`, second: s[1]?.team || `${g}2`, third: s[2]?.team || `${g}3`, row: s[2] };
   });
   return out;
 }
@@ -34,7 +57,7 @@ export function getQualifiers(results) {
 // Returns sorted array of the 8 best 3rd-place teams with their group letter
 export function getBestThirdPlaces(qualifiers) {
   return Object.entries(qualifiers)
-    .map(([g, q]) => ({ group: g, team: q.third, ...q.row }))
+    .map(([g, q]) => ({ group:g, team:q.third, pts:q.row?.pts??0, gd:q.row?.gd??0, gf:q.row?.gf??0 }))
     .sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf)
     .slice(0, 8);
 }

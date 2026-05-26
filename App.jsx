@@ -1,46 +1,85 @@
 import { useState, useEffect } from "react";
 import {
   SCORING, KNOCKOUT_SCORING, BONUS_QUESTIONS,
-  MAX_PLAYERS, COLORS, PLAYER_EMOJIS, TABS, STORAGE_KEY,
+  MAX_PLAYERS, COLORS, TABS, STORAGE_KEY,
 } from "./config.js";
 import { GROUPS, GROUP_MATCHES, flag } from "./data.js";
 import {
-  calcGroupStandings, getQualifiers, getBestThirdPlaces,
+  calcGroupStandings, calcGroupStandingsFromOutcomes,
+  getQualifiers, getBestThirdPlaces,
   buildR32Bracket, getKnockoutMatchup,
   KNOCKOUT_ROUNDS_META, BRACKET_FEEDS,
 } from "./bracketLogic.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function pointsForResult(pred, actual) {
-  if (!pred || !actual) return 0;
-  const ph = parseInt(pred.home), pa = parseInt(pred.away);
-  const ah = parseInt(actual.home), aa = parseInt(actual.away);
-  if (isNaN(ph)||isNaN(pa)||isNaN(ah)||isNaN(aa)) return 0;
-  if (ph===ah && pa===aa) return SCORING.exactScore;
-  const po = ph>pa?"H":ph<pa?"A":"D";
-  const ao = ah>aa?"H":ah<aa?"A":"D";
-  return po===ao ? SCORING.correctOutcome : 0;
+function groupIsComplete(g, results) {
+  return GROUP_MATCHES.filter(m => m.group === g).every(m => {
+    const r = results[m.id];
+    return r && r.home !== "" && r.away !== "" && r.home != null && r.away != null;
+  });
 }
 
-// Build predicted qualifiers for a player based on their score predictions
-function buildPredQualifiers(pi, predictions) {
+function pointsForOutcome(pred, actual) {
+  if (!pred?.outcome) return 0;
+  const h = parseInt(actual?.home), a = parseInt(actual?.away);
+  if (isNaN(h) || isNaN(a)) return 0;
+  const actualOutcome = h > a ? "H" : h < a ? "A" : "D";
+  return pred.outcome === actualOutcome ? SCORING.correctOutcome : 0;
+}
+
+// Within equal-pts groups, respect the stored manual ordering
+function applyManualOrder(standings, storedOrder) {
+  if (!storedOrder || storedOrder.length === 0) return standings;
+  const result = [];
+  let i = 0;
+  while (i < standings.length) {
+    let j = i;
+    while (j < standings.length - 1 && standings[j + 1].pts === standings[j].pts) j++;
+    const group = standings.slice(i, j + 1);
+    if (group.length <= 1) {
+      result.push(...group);
+    } else {
+      result.push(...[...group].sort((a, b) => {
+        const ia = storedOrder.indexOf(a.team);
+        const ib = storedOrder.indexOf(b.team);
+        if (ia === -1 && ib === -1) return 0;
+        if (ia === -1) return 1;
+        if (ib === -1) return -1;
+        return ia - ib;
+      }));
+    }
+    i = j + 1;
+  }
+  return result;
+}
+
+function getPredEffectiveOrder(pi, g, predictions) {
   const preds = predictions[pi] || {};
+  const outcomes = Object.fromEntries(
+    GROUP_MATCHES.filter(m => m.group === g).map(m => [m.id, preds[m.id]?.outcome || null])
+  );
+  const standings = calcGroupStandingsFromOutcomes(g, GROUPS[g], outcomes);
+  return applyManualOrder(standings, preds.tableOrder?.[g]);
+}
+
+function buildPredQualifiers(pi, predictions) {
   const qualifiers = {};
   Object.entries(GROUPS).forEach(([g, teams]) => {
-    const matchResults = Object.fromEntries(
-      GROUP_MATCHES.filter(m => m.group===g).map(m => [m.id, preds[m.id]||null])
-    );
-    const s = calcGroupStandings(g, teams, matchResults);
-    qualifiers[g] = { first:s[0]?.team||`${g}1`, second:s[1]?.team||`${g}2`, third:s[2]?.team||`${g}3` };
+    const ordered = getPredEffectiveOrder(pi, g, predictions);
+    qualifiers[g] = {
+      first:  ordered[0]?.team || `${g}1`,
+      second: ordered[1]?.team || `${g}2`,
+      third:  ordered[2]?.team || `${g}3`,
+      row:    ordered[2] || { team:`${g}3`, pts:0, gd:0, gf:0 },
+    };
   });
   return qualifiers;
 }
 
-// Build predicted R32 bracket for a player (uses their group preds + 3rd-place picks)
 function buildPredR32(pi, predictions) {
   const q = buildPredQualifiers(pi, predictions);
   const picks = predictions[pi]?.thirdPlaces || [];
-  return buildR32Bracket(q, picks.length===8 ? picks : null);
+  return buildR32Bracket(q, picks.length === 8 ? picks : null);
 }
 
 // ── Main App ──────────────────────────────────────────────────────────────────
@@ -87,6 +126,12 @@ export default function App() {
   function setPred(pi, matchId, side, val) {
     setPredictions(prev => ({ ...prev, [pi]: { ...prev[pi], [matchId]: { ...(prev[pi]?.[matchId]||{}), [side]:val } } }));
   }
+  function setTableOrder(pi, group, order) {
+    setPredictions(prev => ({
+      ...prev,
+      [pi]: { ...prev[pi], tableOrder: { ...(prev[pi]?.tableOrder||{}), [group]: order } },
+    }));
+  }
   function setBonusPred(pi, qid, val) {
     setPredictions(prev => ({ ...prev, [pi]: { ...prev[pi], bonus:{ ...(prev[pi]?.bonus||{}), [qid]:val } } }));
   }
@@ -105,50 +150,83 @@ export default function App() {
   function setKnockoutWinnerResult(matchId, team) {
     setResults(prev => ({ ...prev, knockoutWinners:{ ...(prev.knockoutWinners||{}), [matchId]:team } }));
   }
+  function setTiebreaker(group, type, team, val) {
+    setResults(prev => ({
+      ...prev,
+      tiebreakers: {
+        ...(prev.tiebreakers || {}),
+        [group]: {
+          ...(prev.tiebreakers?.[group] || {}),
+          [type]: { ...(prev.tiebreakers?.[group]?.[type] || {}), [team]: val },
+        },
+      },
+    }));
+  }
 
   // ── Scoring ────────────────────────────────────────────────────────────────
   function calcScore(pi) {
     let score = 0;
-    // Group stage
+    // Group match outcomes
     GROUP_MATCHES.forEach(m => {
-      score += pointsForResult(predictions[pi]?.[m.id], results[m.id]);
+      score += pointsForOutcome(predictions[pi]?.[m.id], results[m.id]);
     });
-    // Bonus
+    // Table positions — only once all 6 group matches are played
+    Object.entries(GROUPS).forEach(([g, teams]) => {
+      if (!groupIsComplete(g, results)) return;
+      const predOrder = getPredEffectiveOrder(pi, g, predictions).map(r => r.team);
+      const actualS   = calcGroupStandings(g, teams, results);
+      predOrder.forEach((team, idx) => {
+        if (actualS[idx]?.team === team) score += SCORING.tablePosition;
+      });
+    });
+    // Bonus questions
     BONUS_QUESTIONS.forEach(bq => {
       const pred   = predictions[pi]?.bonus?.[bq.id];
       const actual = results[`bonus_${bq.id}`];
-      if (pred && actual && pred.toLowerCase().trim()===actual.toLowerCase().trim())
-        score += SCORING.bonusQuestion;
+      if (pred && actual && pred.toLowerCase().trim() === actual.toLowerCase().trim())
+        score += bq.pts;
     });
     // Knockout rounds
     KNOCKOUT_ROUNDS_META.forEach(round => {
       round.matchIds.forEach(mid => {
-        const predWinner   = predictions[pi]?.knockoutWinners?.[mid];
-        const actualWinner = results.knockoutWinners?.[mid];
-        if (predWinner && actualWinner && predWinner===actualWinner)
-          score += round.pts;
+        const pw = predictions[pi]?.knockoutWinners?.[mid];
+        const aw = results.knockoutWinners?.[mid];
+        if (pw && aw && pw === aw) score += round.pts;
       });
     });
     return score;
   }
 
   function calcScoreBreakdown(pi) {
-    let group=0, bonus=0;
+    let outcomes = 0, table = 0, bonus = 0;
     const knockout = {};
-    KNOCKOUT_ROUNDS_META.forEach(r => { knockout[r.id]=0; });
+    KNOCKOUT_ROUNDS_META.forEach(r => { knockout[r.id] = 0; });
 
-    GROUP_MATCHES.forEach(m => { group += pointsForResult(predictions[pi]?.[m.id], results[m.id]); });
+    GROUP_MATCHES.forEach(m => {
+      outcomes += pointsForOutcome(predictions[pi]?.[m.id], results[m.id]);
+    });
+    Object.entries(GROUPS).forEach(([g, teams]) => {
+      if (!groupIsComplete(g, results)) return;
+      const predOrder = getPredEffectiveOrder(pi, g, predictions).map(r => r.team);
+      const actualS   = calcGroupStandings(g, teams, results);
+      predOrder.forEach((team, idx) => {
+        if (actualS[idx]?.team === team) table += SCORING.tablePosition;
+      });
+    });
     BONUS_QUESTIONS.forEach(bq => {
-      const pred=predictions[pi]?.bonus?.[bq.id], actual=results[`bonus_${bq.id}`];
-      if (pred&&actual&&pred.toLowerCase().trim()===actual.toLowerCase().trim()) bonus+=SCORING.bonusQuestion;
+      const pred   = predictions[pi]?.bonus?.[bq.id];
+      const actual = results[`bonus_${bq.id}`];
+      if (pred && actual && pred.toLowerCase().trim() === actual.toLowerCase().trim())
+        bonus += bq.pts;
     });
     KNOCKOUT_ROUNDS_META.forEach(round => {
       round.matchIds.forEach(mid => {
-        const pw=predictions[pi]?.knockoutWinners?.[mid], aw=results.knockoutWinners?.[mid];
-        if (pw&&aw&&pw===aw) knockout[round.id]+=round.pts;
+        const pw = predictions[pi]?.knockoutWinners?.[mid];
+        const aw = results.knockoutWinners?.[mid];
+        if (pw && aw && pw === aw) knockout[round.id] += round.pts;
       });
     });
-    return { group, bonus, knockout };
+    return { outcomes, table, bonus, knockout };
   }
 
   const scores = activePlayers.map((_, i) => calcScore(i));
@@ -164,17 +242,11 @@ export default function App() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500&display=swap');
         *{box-sizing:border-box;}
-        input[type=number]{-moz-appearance:textfield;}
-        input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;}
         ::-webkit-scrollbar{width:4px;height:4px;}
         ::-webkit-scrollbar-track{background:#111;}
         ::-webkit-scrollbar-thumb{background:#333;border-radius:2px;}
         .tab-btn{border:none;cursor:pointer;font-family:'Barlow Condensed',Arial;font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:8px 14px;transition:all 0.15s;background:transparent;}
         .match-row{display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;background:#12121c;border:1px solid #1c1c2c;margin-bottom:5px;}
-        .score-input{width:36px;height:32px;background:#080810;border:1.5px solid #252535;color:#fff;font-size:16px;font-weight:700;text-align:center;border-radius:5px;outline:none;font-family:inherit;}
-        .score-input:focus{border-color:#f97316;}
-        .score-input.actual{border-color:#3b82f6;background:#0c1118;}
-        .score-input.actual:focus{border-color:#60a5fa;}
         .grp-btn{border:none;cursor:pointer;font-family:'Barlow Condensed',Arial;font-size:12px;font-weight:700;padding:5px 11px;border-radius:4px;transition:all 0.15s;letter-spacing:1px;}
         .bonus-input{width:100%;background:#080810;border:1.5px solid #252535;color:#fff;font-size:14px;padding:7px 10px;border-radius:6px;outline:none;font-family:'Barlow',Arial;}
         .bonus-input:focus{border-color:#f97316;}
@@ -183,13 +255,20 @@ export default function App() {
         .hscroll::-webkit-scrollbar{height:3px;}
         .pick-btn{border:none;cursor:pointer;font-family:'Barlow Condensed',Arial;font-size:12px;font-weight:700;padding:6px 10px;border-radius:6px;transition:all 0.15s;text-align:left;width:100%;}
         .ko-team{flex:1;border:none;cursor:pointer;font-family:'Barlow Condensed',Arial;font-size:11px;font-weight:600;padding:5px 8px;border-radius:5px;transition:all 0.15s;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .hub-btn{border:none;cursor:pointer;font-family:'Barlow Condensed',Arial;font-size:13px;font-weight:900;padding:5px 10px;border-radius:5px;transition:all 0.15s;letter-spacing:1px;min-width:32px;}
+        .sort-btn{background:transparent;border:none;cursor:pointer;color:#555;font-size:13px;padding:1px 3px;line-height:1;transition:color 0.1s;}
+        .sort-btn:hover{color:#aaa;}
+        .sort-btn:disabled{cursor:default;color:#252535;}
+        .score-input{width:36px;height:32px;background:#080810;border:1.5px solid #252535;color:#fff;font-size:16px;font-weight:700;text-align:center;border-radius:5px;outline:none;font-family:inherit;}
+        .score-input:focus{border-color:#3b82f6;}
+        .score-input.actual{border-color:#3b82f6;background:#0c1118;}
+        .score-input.actual:focus{border-color:#60a5fa;}
       `}</style>
 
       {/* Header */}
       <div style={{ background:"linear-gradient(135deg,#1a0800 0%,#080810 60%)",padding:"18px 16px 0",borderBottom:"1px solid #181828" }}>
         <div style={{ maxWidth:760,margin:"0 auto" }}>
           <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:6 }}>
-            <span style={{ fontSize:26 }}>⚽</span>
             <div>
               <div style={{ fontSize:20,fontWeight:900,letterSpacing:2,textTransform:"uppercase",lineHeight:1 }}>FIFA World Cup 2026</div>
               <div style={{ fontSize:11,color:"#f97316",letterSpacing:3,textTransform:"uppercase",fontWeight:600 }}>Prediction Tracker</div>
@@ -199,7 +278,6 @@ export default function App() {
             <div className="hscroll" style={{ marginTop:8 }}>
               {activePlayers.map((p,i) => p ? (
                 <div key={i} style={{ flexShrink:0,background:`${COLORS[i]}15`,border:`1.5px solid ${COLORS[i]}44`,borderRadius:8,padding:"4px 10px",minWidth:70,textAlign:"center" }}>
-                  <div style={{ fontSize:14 }}>{PLAYER_EMOJIS[i]}</div>
                   <div style={{ fontSize:11,fontWeight:700,color:COLORS[i],whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:80 }}>{p}</div>
                   <div style={{ fontSize:20,fontWeight:900,color:"#fff",lineHeight:1 }}>{scores[i]}</div>
                   <div style={{ fontSize:9,color:"#666",letterSpacing:1 }}>PTS</div>
@@ -238,8 +316,8 @@ export default function App() {
             <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px 12px",marginBottom:20 }}>
               {Array.from({length:numPlayers},(_,i) => (
                 <div key={i} style={{ display:"flex",alignItems:"center",gap:8 }}>
-                  <div style={{ width:28,height:28,borderRadius:"50%",background:`${COLORS[i]}22`,border:`2px solid ${COLORS[i]}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,flexShrink:0 }}>
-                    {PLAYER_EMOJIS[i]}
+                  <div style={{ width:28,height:28,borderRadius:"50%",background:`${COLORS[i]}22`,border:`2px solid ${COLORS[i]}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:COLORS[i],flexShrink:0 }}>
+                    {i+1}
                   </div>
                   <input placeholder={`Player ${i+1}`} value={players[i]}
                     onChange={e => { const p=[...players]; p[i]=e.target.value; setPlayers(p); }}
@@ -247,14 +325,18 @@ export default function App() {
                 </div>
               ))}
             </div>
-            <div style={{ padding:14,background:"#0d0d18",borderRadius:8,border:"1px solid #1c1c2c",fontSize:13,color:"#999",lineHeight:1.9 }}>
-              <div style={{ color:"#3b82f6",fontWeight:700,marginBottom:4,fontSize:14 }}>How scoring works</div>
-              <div>⚽ <b style={{color:"#fff"}}>+{SCORING.exactScore} pts</b> — exact group stage score</div>
-              <div>✅ <b style={{color:"#fff"}}>+{SCORING.correctOutcome} pt</b> — correct outcome (W/D/L)</div>
-              <div>⭐ <b style={{color:"#fff"}}>+{SCORING.bonusQuestion} pts</b> — correct bonus answer</div>
+            <div style={{ padding:14,background:"#0d0d18",borderRadius:8,border:"1px solid #1c1c2c",fontSize:13,color:"#999",lineHeight:2 }}>
+              <div style={{ color:"#3b82f6",fontWeight:700,marginBottom:4,fontSize:14 }}>Reglene</div>
+              <div><b style={{color:"#fff"}}>+{SCORING.correctOutcome} pt</b> — riktig tips (H/U/B) per kamp</div>
+              <div><b style={{color:"#fff"}}>+{SCORING.tablePosition} pt</b> — riktig tabellplassering per lag</div>
               <div style={{ marginTop:6,paddingTop:6,borderTop:"1px solid #1c1c2c" }}>
                 {KNOCKOUT_ROUNDS_META.map(r => (
-                  <div key={r.id}>🏆 <b style={{color:"#fff"}}>+{r.pts} pts</b> — correct {r.label} winner</div>
+                  <div key={r.id}><b style={{color:"#fff"}}>+{r.pts} pts</b> — {r.label}</div>
+                ))}
+              </div>
+              <div style={{ marginTop:6,paddingTop:6,borderTop:"1px solid #1c1c2c" }}>
+                {BONUS_QUESTIONS.map(bq => (
+                  <div key={bq.id}><b style={{color:"#fff"}}>+{bq.pts} pts</b> — {bq.label}</div>
                 ))}
               </div>
             </div>
@@ -272,10 +354,11 @@ export default function App() {
             predictions={predictions}
             results={results}
             setPred={setPred}
+            setTableOrder={setTableOrder}
             setBonusPred={setBonusPred}
             setThirdPlacesPred={setThirdPlacesPred}
             setKnockoutWinnerPred={setKnockoutWinnerPred}
-            pointsForResult={pointsForResult}
+            pointsForOutcome={pointsForOutcome}
           />
         )}
 
@@ -288,6 +371,7 @@ export default function App() {
             setResult={setResult}
             setBonusResult={setBonusResult}
             setKnockoutWinnerResult={setKnockoutWinnerResult}
+            setTiebreaker={setTiebreaker}
           />
         )}
 
@@ -307,12 +391,7 @@ export default function App() {
           <StandingsTab
             activePlayers={activePlayers}
             scores={scores}
-            predictions={predictions}
-            results={results}
-            groupFilter={groupFilter}
-            setGroupFilter={setGroupFilter}
             calcScoreBreakdown={calcScoreBreakdown}
-            pointsForResult={pointsForResult}
           />
         )}
       </div>
@@ -321,7 +400,7 @@ export default function App() {
 }
 
 // ── Predictions Tab ───────────────────────────────────────────────────────────
-function PredictionsTab({ activePlayers, selectedPlayer, setSelectedPlayer, groupFilter, setGroupFilter, predictions, results, setPred, setBonusPred, setThirdPlacesPred, setKnockoutWinnerPred, pointsForResult }) {
+function PredictionsTab({ activePlayers, selectedPlayer, setSelectedPlayer, groupFilter, setGroupFilter, predictions, results, setPred, setTableOrder, setBonusPred, setThirdPlacesPred, setKnockoutWinnerPred, pointsForOutcome }) {
   const pi = selectedPlayer;
 
   return (
@@ -332,7 +411,7 @@ function PredictionsTab({ activePlayers, selectedPlayer, setSelectedPlayer, grou
         {activePlayers.map((p,i) => p ? (
           <button key={i} className="grp-btn" onClick={() => setSelectedPlayer(i)}
             style={{ background:selectedPlayer===i?COLORS[i]:"#12121c",color:selectedPlayer===i?"#000":"#aaa",border:`1px solid ${selectedPlayer===i?COLORS[i]:"#222"}`,flexShrink:0 }}>
-            {PLAYER_EMOJIS[i]} {p||`P${i+1}`}
+            {p||`P${i+1}`}
           </button>
         ) : null)}
       </div>
@@ -347,40 +426,64 @@ function PredictionsTab({ activePlayers, selectedPlayer, setSelectedPlayer, grou
         ))}
         <button className="grp-btn" onClick={() => setGroupFilter("BONUS")}
           style={{ background:groupFilter==="BONUS"?"#a855f7":"#12121c",color:groupFilter==="BONUS"?"#fff":"#888",border:`1px solid ${groupFilter==="BONUS"?"#a855f7":"#222"}` }}>
-          ⭐
+          Bonus
         </button>
         <button className="grp-btn" onClick={() => setGroupFilter("BRACKET")}
           style={{ background:groupFilter==="BRACKET"?"#f43f5e":"#12121c",color:groupFilter==="BRACKET"?"#fff":"#888",border:`1px solid ${groupFilter==="BRACKET"?"#f43f5e":"#222"}` }}>
-          🏆 Bracket
+          Bracket
         </button>
       </div>
 
       {/* ── Group predictions ── */}
       {!["BONUS","BRACKET"].includes(groupFilter) && (() => {
         const pred = predictions[pi] || {};
+        const outcomes = Object.fromEntries(
+          GROUP_MATCHES.filter(m=>m.group===groupFilter).map(m=>[m.id, pred[m.id]?.outcome||null])
+        );
         return (
           <>
             <div style={{ fontSize:10,color:"#444",letterSpacing:1,textTransform:"uppercase",marginBottom:8 }}>
               Group {groupFilter} — {activePlayers[pi]||`Player ${pi+1}`}'s predictions
             </div>
             {GROUP_MATCHES.filter(m=>m.group===groupFilter).map(m => {
-              const p=pred[m.id]||{}, actual=results[m.id];
+              const p = pred[m.id] || {};
+              const actual = results[m.id];
+              const outcome = p.outcome;
               return (
                 <div key={m.id} className="match-row">
                   <span style={{ fontSize:10,color:"#444",minWidth:42,flexShrink:0 }}>{m.date}</span>
                   <span style={{ fontSize:12,flex:1,textAlign:"right",fontWeight:600,whiteSpace:"nowrap" }}>{flag(m.home)} {m.home}</span>
-                  <input type="number" min="0" max="20" className="score-input" value={p.home??""} onChange={e=>setPred(pi,m.id,"home",e.target.value)} placeholder="-"/>
-                  <span style={{ color:"#333",fontSize:11,fontWeight:700 }}>:</span>
-                  <input type="number" min="0" max="20" className="score-input" value={p.away??""} onChange={e=>setPred(pi,m.id,"away",e.target.value)} placeholder="-"/>
+                  <div style={{ display:"flex",gap:3,flexShrink:0 }}>
+                    {[["H","H"],["U","D"],["B","A"]].map(([label, val]) => (
+                      <button key={val} className="hub-btn"
+                        onClick={() => setPred(pi, m.id, "outcome", outcome===val ? null : val)}
+                        style={{
+                          background: outcome===val ? "#f97316" : "#0d0d1a",
+                          color:      outcome===val ? "#000" : "#555",
+                          border:     `1.5px solid ${outcome===val ? "#f97316" : "#252535"}`,
+                        }}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                   <span style={{ fontSize:12,flex:1,fontWeight:600,whiteSpace:"nowrap" }}>{flag(m.away)} {m.away}</span>
-                  {actual && <PointsBadge pts={pointsForResult(p,actual)}/>}
+                  {actual && <PointsBadge pts={pointsForOutcome(p, actual)}/>}
                 </div>
               );
             })}
+
             <div style={{ marginTop:12 }}>
-              <div style={{ fontSize:10,color:"#444",letterSpacing:1,textTransform:"uppercase",marginBottom:6 }}>Predicted standings</div>
-              <GroupTable group={groupFilter} teams={GROUPS[groupFilter]}
-                results={Object.fromEntries(GROUP_MATCHES.filter(m=>m.group===groupFilter).map(m=>[m.id,pred[m.id]||null]))}/>
+              <div style={{ fontSize:10,color:"#444",letterSpacing:1,textTransform:"uppercase",marginBottom:4 }}>
+                Predicted standings
+                <span style={{ color:"#333",marginLeft:6,textTransform:"none",letterSpacing:0 }}>— ↑↓ swap tied teams</span>
+              </div>
+              <GroupTableEditable
+                group={groupFilter}
+                teams={GROUPS[groupFilter]}
+                outcomes={outcomes}
+                storedOrder={pred.tableOrder?.[groupFilter]}
+                onOrderChange={order => setTableOrder(pi, groupFilter, order)}
+              />
             </div>
           </>
         );
@@ -389,19 +492,19 @@ function PredictionsTab({ activePlayers, selectedPlayer, setSelectedPlayer, grou
       {/* ── Bonus ── */}
       {groupFilter==="BONUS" && (
         <div>
-          <div style={{ fontSize:10,color:"#444",letterSpacing:1,textTransform:"uppercase",marginBottom:10 }}>
-            Bonus — {SCORING.bonusQuestion} pts each
-          </div>
           {BONUS_QUESTIONS.map(bq => {
-            const pred=predictions[pi]?.bonus?.[bq.id]||"";
-            const actual=results[`bonus_${bq.id}`];
-            const correct=actual&&pred&&pred.toLowerCase().trim()===actual.toLowerCase().trim();
+            const pred   = predictions[pi]?.bonus?.[bq.id] || "";
+            const actual = results[`bonus_${bq.id}`];
+            const correct = actual && pred && pred.toLowerCase().trim() === actual.toLowerCase().trim();
             return (
-              <div key={bq.id} style={{ marginBottom:12 }}>
-                <div style={{ fontSize:13,fontWeight:600,marginBottom:5,color:"#ddd" }}>{bq.label}</div>
+              <div key={bq.id} style={{ marginBottom:16 }}>
+                <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:6 }}>
+                  <span style={{ fontSize:13,fontWeight:700,color:"#ddd" }}>{bq.label}</span>
+                  <span style={{ fontSize:10,background:"#f9731622",color:"#f97316",border:"1px solid #f9731640",borderRadius:4,padding:"1px 7px",fontWeight:700 }}>+{bq.pts} pts</span>
+                </div>
                 <div style={{ display:"flex",gap:8,alignItems:"center" }}>
-                  <input className="bonus-input" placeholder="Your answer..." value={pred} onChange={e=>setBonusPred(pi,bq.id,e.target.value)}/>
-                  {actual && <PointsBadge pts={correct?SCORING.bonusQuestion:0}/>}
+                  <input className="bonus-input" placeholder="Your answer…" value={pred} onChange={e=>setBonusPred(pi,bq.id,e.target.value)}/>
+                  {actual && <PointsBadge pts={correct?bq.pts:0}/>}
                 </div>
                 {actual && <div style={{ fontSize:11,color:"#3b82f6",marginTop:3 }}>Actual: {actual}</div>}
               </div>
@@ -425,21 +528,65 @@ function PredictionsTab({ activePlayers, selectedPlayer, setSelectedPlayer, grou
   );
 }
 
+// ── Group Table Editable (predictions) ────────────────────────────────────────
+function GroupTableEditable({ group, teams, outcomes, storedOrder, onOrderChange }) {
+  const standings = calcGroupStandingsFromOutcomes(group, teams, outcomes);
+  const effective = applyManualOrder(standings, storedOrder);
+
+  const swap = (i, j) => {
+    const newOrder = effective.map(r => r.team);
+    [newOrder[i], newOrder[j]] = [newOrder[j], newOrder[i]];
+    onOrderChange(newOrder);
+  };
+
+  return (
+    <div style={{ background:"#0c0c18",borderRadius:8,overflow:"hidden",border:"1px solid #181828",fontSize:12 }}>
+      <div style={{ display:"grid",gridTemplateColumns:"28px 1fr 26px 26px 26px 38px 44px",padding:"4px 10px",background:"#121220",color:"#444",fontSize:9,letterSpacing:1,textTransform:"uppercase" }}>
+        <div>#</div><div>Team</div>
+        <div style={{textAlign:"center"}}>W</div>
+        <div style={{textAlign:"center"}}>D</div>
+        <div style={{textAlign:"center"}}>L</div>
+        <div style={{textAlign:"center",color:"#f97316"}}>Pts</div>
+        <div style={{textAlign:"center"}}>↑↓</div>
+      </div>
+      {effective.map((row, i) => {
+        const canUp   = i > 0 && effective[i-1].pts === row.pts;
+        const canDown = i < effective.length-1 && effective[i+1].pts === row.pts;
+        const barColor = i===0?"#f97316":i===1?"#3b82f6":i===2?"#555":"transparent";
+        return (
+          <div key={row.team} style={{ display:"grid",gridTemplateColumns:"28px 1fr 26px 26px 26px 38px 44px",padding:"5px 10px",background:i%2===0?"#0c0c18":"#0a0a14",borderTop:"1px solid #121220",alignItems:"center" }}>
+            <div style={{ display:"flex",alignItems:"center",gap:3 }}>
+              <span style={{ width:3,height:12,borderRadius:1,background:barColor,flexShrink:0,display:"inline-block" }}/>
+              <span style={{ color:"#555",fontSize:10 }}>{i+1}</span>
+            </div>
+            <div style={{ whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{flag(row.team)} {row.team}</div>
+            <div style={{textAlign:"center",color:"#888"}}>{row.w}</div>
+            <div style={{textAlign:"center",color:"#888"}}>{row.d}</div>
+            <div style={{textAlign:"center",color:"#888"}}>{row.l}</div>
+            <div style={{textAlign:"center",fontWeight:700,color:"#f97316",fontSize:14}}>{row.pts}</div>
+            <div style={{ display:"flex",justifyContent:"center",gap:1 }}>
+              <button className="sort-btn" onClick={() => canUp && swap(i,i-1)} disabled={!canUp}>↑</button>
+              <button className="sort-btn" onClick={() => canDown && swap(i,i+1)} disabled={!canDown}>↓</button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Bracket Predictions ───────────────────────────────────────────────────────
 function BracketPredictions({ pi, playerName, predictions, results, setThirdPlacesPred, setKnockoutWinnerPred }) {
   const pred       = predictions[pi] || {};
   const thirdPicks = pred.thirdPlaces || [];
   const koWinners  = pred.knockoutWinners || {};
 
-  // Build predicted qualifiers from this player's group score predictions
   const predQ = buildPredQualifiers(pi, predictions);
 
-  // Get predicted 3rd-place team per group
   const thirds = Object.entries(GROUPS).map(([g]) => ({
     group:g, team: predQ[g]?.third || `3rd ${g}`
   }));
 
-  // Build predicted R32 bracket
   const r32 = buildR32Bracket(predQ, thirdPicks.length===8 ? thirdPicks : null);
 
   const toggleThird = (g) => {
@@ -466,8 +613,8 @@ function BracketPredictions({ pi, playerName, predictions, results, setThirdPlac
         </div>
         <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:5 }}>
           {thirds.map(({ group, team }) => {
-            const sel = thirdPicks.includes(group);
-            const full = !sel && thirdPicks.length>=8;
+            const sel  = thirdPicks.includes(group);
+            const full = !sel && thirdPicks.length >= 8;
             return (
               <button key={group} onClick={() => !full && toggleThird(group)} disabled={full}
                 style={{ background:sel?"#f97316":"#12121c",border:`1px solid ${sel?"#f97316":"#252535"}`,borderRadius:6,padding:"6px 8px",cursor:full?"default":"pointer",opacity:full?0.4:1,textAlign:"left" }}>
@@ -493,7 +640,7 @@ function BracketPredictions({ pi, playerName, predictions, results, setThirdPlac
             <div style={{ fontSize:13,fontWeight:700,color:"#f97316",letterSpacing:1,textTransform:"uppercase" }}>{round.label}</div>
             <div style={{ fontSize:10,background:"#f9731622",color:"#f97316",border:"1px solid #f9731640",borderRadius:4,padding:"1px 7px",fontWeight:700 }}>+{round.pts} pts</div>
           </div>
-          {round.matchIds.map((mid, i) => {
+          {round.matchIds.map(mid => {
             const { home, away } = getKnockoutMatchup(mid, r32, koWinners);
             const winner  = koWinners[mid] || null;
             const actual  = results.knockoutWinners?.[mid];
@@ -504,22 +651,22 @@ function BracketPredictions({ pi, playerName, predictions, results, setThirdPlac
             return (
               <div key={mid} style={{ marginBottom:5 }}>
                 <div style={{ display:"flex",alignItems:"center",gap:5 }}>
-                  <span style={{ fontSize:9,color:"#333",minWidth:34,fontWeight:700 }}>M{i+1+round.matchIds.indexOf(mid)-round.matchIds.indexOf(mid)}{mid.replace("M","")}</span>
+                  <span style={{ fontSize:9,color:"#333",minWidth:34,fontWeight:700 }}>{mid}</span>
                   <button className="ko-team" onClick={() => bothKnown&&pickKO(mid,home)}
                     style={{
-                      background: winner===home ? "#f97316" : "#12121c",
-                      border: `1px solid ${winner===home?"#f97316":"#252535"}`,
+                      background: winner===home?"#f97316":"#12121c",
+                      border:`1px solid ${winner===home?"#f97316":"#252535"}`,
                       color: winner===home?"#000":"#aaa",
                       cursor: bothKnown?"pointer":"default",
-                      opacity: (!bothKnown||(!winner&&false)) ? 0.5 : 1,
+                      opacity: !bothKnown ? 0.5 : 1,
                     }}>
                     {flag(home)} {home}
                   </button>
                   <span style={{ color:"#333",fontSize:10,fontWeight:700,flexShrink:0 }}>vs</span>
                   <button className="ko-team" onClick={() => bothKnown&&pickKO(mid,away)}
                     style={{
-                      background: winner===away ? "#f97316" : "#12121c",
-                      border: `1px solid ${winner===away?"#f97316":"#252535"}`,
+                      background: winner===away?"#f97316":"#12121c",
+                      border:`1px solid ${winner===away?"#f97316":"#252535"}`,
                       color: winner===away?"#000":"#aaa",
                       cursor: bothKnown?"pointer":"default",
                       opacity: !bothKnown ? 0.5 : 1,
@@ -547,7 +694,7 @@ function BracketPredictions({ pi, playerName, predictions, results, setThirdPlac
 }
 
 // ── Results Tab ───────────────────────────────────────────────────────────────
-function ResultsTab({ groupFilter, setGroupFilter, results, setResult, setBonusResult, setKnockoutWinnerResult }) {
+function ResultsTab({ groupFilter, setGroupFilter, results, setResult, setBonusResult, setKnockoutWinnerResult, setTiebreaker }) {
   const actualQ   = getQualifiers(results);
   const actualR32 = buildR32Bracket(actualQ);
   const koWinners = results.knockoutWinners || {};
@@ -567,26 +714,34 @@ function ResultsTab({ groupFilter, setGroupFilter, results, setResult, setBonusR
         ))}
         <button className="grp-btn" onClick={() => setGroupFilter("BONUS")}
           style={{ background:groupFilter==="BONUS"?"#a855f7":"#12121c",color:groupFilter==="BONUS"?"#fff":"#888",border:`1px solid ${groupFilter==="BONUS"?"#a855f7":"#222"}` }}>
-          ⭐
+          Bonus
         </button>
         <button className="grp-btn" onClick={() => setGroupFilter("KNOCKOUT")}
           style={{ background:groupFilter==="KNOCKOUT"?"#f43f5e":"#12121c",color:groupFilter==="KNOCKOUT"?"#fff":"#888",border:`1px solid ${groupFilter==="KNOCKOUT"?"#f43f5e":"#222"}` }}>
-          🏆
+          Knockout
         </button>
       </div>
 
       {/* Group results */}
-      {!["BONUS","KNOCKOUT"].includes(groupFilter) && (
+      {!["BONUS","KNOCKOUT","BRACKET"].includes(groupFilter) && (
         <>
           {GROUP_MATCHES.filter(m=>m.group===groupFilter).map(m => {
-            const actual=results[m.id]||{};
+            const actual = results[m.id] || {};
             return (
               <div key={m.id} className="match-row">
                 <span style={{ fontSize:10,color:"#444",minWidth:42,flexShrink:0 }}>{m.date}</span>
                 <span style={{ fontSize:12,flex:1,textAlign:"right",fontWeight:600,whiteSpace:"nowrap" }}>{flag(m.home)} {m.home}</span>
-                <input type="number" min="0" max="20" className="score-input actual" value={actual.home??""} onChange={e=>setResult(m.id,"home",e.target.value)} placeholder="-"/>
-                <span style={{ color:"#222",fontSize:11,fontWeight:700 }}>:</span>
-                <input type="number" min="0" max="20" className="score-input actual" value={actual.away??""} onChange={e=>setResult(m.id,"away",e.target.value)} placeholder="-"/>
+                <div style={{ display:"flex",alignItems:"center",gap:4,flexShrink:0 }}>
+                  <input className="score-input actual" type="number" min={0} max={99}
+                    value={actual.home ?? ""}
+                    onChange={e => setResult(m.id, "home", e.target.value)}
+                    placeholder="0"/>
+                  <span style={{ color:"#333",fontSize:11 }}>–</span>
+                  <input className="score-input actual" type="number" min={0} max={99}
+                    value={actual.away ?? ""}
+                    onChange={e => setResult(m.id, "away", e.target.value)}
+                    placeholder="0"/>
+                </div>
                 <span style={{ fontSize:12,flex:1,fontWeight:600,whiteSpace:"nowrap" }}>{flag(m.away)} {m.away}</span>
               </div>
             );
@@ -595,6 +750,7 @@ function ResultsTab({ groupFilter, setGroupFilter, results, setResult, setBonusR
             <div style={{ fontSize:10,color:"#444",letterSpacing:1,textTransform:"uppercase",marginBottom:6 }}>Group {groupFilter} Standings</div>
             <GroupTable group={groupFilter} teams={GROUPS[groupFilter]} results={results} highlight/>
           </div>
+          <TiebreakerSection group={groupFilter} results={results} setTiebreaker={setTiebreaker}/>
         </>
       )}
 
@@ -604,8 +760,11 @@ function ResultsTab({ groupFilter, setGroupFilter, results, setResult, setBonusR
           <div style={{ fontSize:10,color:"#444",letterSpacing:1,textTransform:"uppercase",marginBottom:10 }}>Bonus — enter actual answers</div>
           {BONUS_QUESTIONS.map(bq => (
             <div key={bq.id} style={{ marginBottom:12 }}>
-              <div style={{ fontSize:13,fontWeight:600,marginBottom:5,color:"#ddd" }}>{bq.label}</div>
-              <input className="bonus-input actual" placeholder="Actual answer..." value={results[`bonus_${bq.id}`]||""} onChange={e=>setBonusResult(bq.id,e.target.value)}/>
+              <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:5 }}>
+                <span style={{ fontSize:13,fontWeight:600,color:"#ddd" }}>{bq.label}</span>
+                <span style={{ fontSize:10,background:"#3b82f622",color:"#3b82f6",border:"1px solid #3b82f640",borderRadius:4,padding:"1px 7px" }}>+{bq.pts} pts</span>
+              </div>
+              <input className="bonus-input actual" placeholder="Actual answer…" value={results[`bonus_${bq.id}`]||""} onChange={e=>setBonusResult(bq.id,e.target.value)}/>
             </div>
           ))}
         </div>
@@ -663,12 +822,12 @@ function BracketTab({ activePlayers, predictions, results, bracketView, setBrack
       <div className="hscroll" style={{ marginBottom:14 }}>
         <button className="grp-btn" onClick={() => setBracketView("actual")}
           style={{ background:isActual?"#3b82f6":"#12121c",color:isActual?"#fff":"#888",border:`1px solid ${isActual?"#3b82f6":"#222"}`,flexShrink:0 }}>
-          📊 Actual
+          Actual
         </button>
         {activePlayers.map((p,i) => p ? (
           <button key={i} className="grp-btn" onClick={() => setBracketView(i)}
             style={{ background:bracketView===i?COLORS[i]:"#12121c",color:bracketView===i?"#000":"#888",border:`1px solid ${bracketView===i?COLORS[i]:"#222"}`,flexShrink:0 }}>
-            {PLAYER_EMOJIS[i]} {p}
+            {p}
           </button>
         ) : null)}
       </div>
@@ -703,7 +862,7 @@ function BracketTab({ activePlayers, predictions, results, bracketView, setBrack
 }
 
 function BracketMatch({ t1, t2, label, winner }) {
-  const isTBD = t => !t || t.startsWith("W(") || t.endsWith("TBD") || t.includes("1") && t.length<=3;
+  const isTBD = t => !t || t.startsWith("W(") || t.endsWith("TBD") || (t.includes("1") && t.length<=3);
   const col1 = winner ? (winner===t1?"#10b981":"#444") : (isTBD(t1)?"#444":"#f0f0f0");
   const col2 = winner ? (winner===t2?"#10b981":"#444") : (isTBD(t2)?"#444":"#f0f0f0");
   return (
@@ -721,120 +880,62 @@ function BracketMatch({ t1, t2, label, winner }) {
 }
 
 // ── Standings Tab ─────────────────────────────────────────────────────────────
-function StandingsTab({ activePlayers, scores, predictions, results, groupFilter, setGroupFilter, calcScoreBreakdown, pointsForResult }) {
-  const sorted = [...activePlayers.map((p,i) => ({ name:p||`P${i+1}`,score:scores[i],idx:i,color:COLORS[i],emoji:PLAYER_EMOJIS[i] }))]
-    .filter(p=>p.name).sort((a,b)=>b.score-a.score);
+function StandingsTab({ activePlayers, scores, calcScoreBreakdown }) {
+  const rows = activePlayers
+    .map((p, i) => ({ name: p, score: scores[i], idx: i, bd: calcScoreBreakdown(i) }))
+    .filter(p => p.name)
+    .sort((a, b) => b.score - a.score);
+
+  const koTotal = bd => Object.values(bd.knockout).reduce((s, v) => s + v, 0);
+
+  const th = (extra) => ({
+    padding:"9px 12px", fontWeight:600, fontSize:10, letterSpacing:1,
+    textTransform:"uppercase", color:"#555", borderBottom:"1px solid #1c1c2c",
+    background:"#121220", ...extra,
+  });
+  const td = (extra) => ({
+    padding:"10px 12px", borderTop:"1px solid #121220", fontSize:13, ...extra,
+  });
 
   return (
     <div>
       <STitle>Leaderboard</STitle>
-      {!activePlayers.some(p=>p) ? (
+      {rows.length === 0 ? (
         <div style={{ color:"#555",fontSize:14 }}>Add player names in Setup first.</div>
       ) : (
-        <>
-          {/* Score cards */}
-          <div style={{ display:"flex",gap:8,marginBottom:16,flexWrap:"wrap" }}>
-            {sorted.map((p,rank) => {
-              const bd = calcScoreBreakdown(p.idx);
-              return (
-                <div key={p.idx} style={{ flex:"1 1 90px",minWidth:80,background:`${p.color}12`,border:`2px solid ${rank===0?p.color:p.color+"44"}`,borderRadius:10,padding:"8px 6px",textAlign:"center",position:"relative" }}>
-                  {rank===0 && <div style={{ position:"absolute",top:-10,left:"50%",transform:"translateX(-50%)",fontSize:14 }}>👑</div>}
-                  <div style={{ fontSize:18,marginTop:rank===0?4:0 }}>{p.emoji}</div>
-                  <div style={{ fontSize:11,fontWeight:700,color:p.color,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{p.name}</div>
-                  <div style={{ fontSize:22,fontWeight:900,lineHeight:1 }}>{p.score}</div>
-                  <div style={{ fontSize:9,color:"#555",letterSpacing:1,marginBottom:4 }}>#{rank+1}</div>
-                  <div style={{ fontSize:9,color:"#444",lineHeight:1.5 }}>
-                    <div>Grps: {bd.group}</div>
-                    <div>Bonus: {bd.bonus}</div>
-                    {Object.entries(bd.knockout).map(([k,v]) => v>0 && <div key={k}>{k}: {v}</div>)}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Group breakdown */}
-          <div style={{ fontSize:10,color:"#444",letterSpacing:1,textTransform:"uppercase",marginBottom:8 }}>Group Breakdown</div>
-          <div style={{ display:"flex",gap:5,flexWrap:"wrap",marginBottom:10 }}>
-            {Object.keys(GROUPS).map(g => (
-              <button key={g} className="grp-btn" onClick={() => setGroupFilter(g)}
-                style={{ background:groupFilter===g?"#f97316":"#12121c",color:groupFilter===g?"#000":"#888",border:`1px solid ${groupFilter===g?"#f97316":"#222"}` }}>
-                {g}
-              </button>
-            ))}
-          </div>
-          {GROUP_MATCHES.filter(m=>m.group===groupFilter).map(m => {
-            const actual=results[m.id];
-            return (
-              <div key={m.id} style={{ background:"#0c0c18",border:"1px solid #181828",borderRadius:7,padding:"7px 10px",marginBottom:5 }}>
-                <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4 }}>
-                  <span style={{ fontSize:11,color:"#444" }}>{m.date}</span>
-                  <span style={{ fontSize:12,fontWeight:600 }}>{flag(m.home)} {m.home} <span style={{color:"#444"}}>vs</span> {flag(m.away)} {m.away}</span>
-                  <span style={{ fontSize:12,color:actual?"#3b82f6":"#333" }}>{actual?`${actual.home}-${actual.away}`:"TBD"}</span>
-                </div>
-                <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
-                  {activePlayers.map((p,pi) => p ? (
-                    <div key={pi} style={{ display:"flex",alignItems:"center",gap:4 }}>
-                      <span style={{ fontSize:11,color:COLORS[pi],fontWeight:700 }}>{p}</span>
-                      <span style={{ fontSize:11,color:"#555" }}>{predictions[pi]?.[m.id]?`${predictions[pi][m.id].home??"-"}-${predictions[pi][m.id].away??"-"}`:"?"}</span>
-                      {actual && <MiniPts pts={pointsForResult(predictions[pi]?.[m.id],actual)}/>}
-                    </div>
-                  ) : null)}
-                </div>
-              </div>
-            );
-          })}
-
-          {/* Knockout breakdown */}
-          <div style={{ marginTop:16,fontSize:10,color:"#444",letterSpacing:1,textTransform:"uppercase",marginBottom:8 }}>Knockout Results</div>
-          {KNOCKOUT_ROUNDS_META.map(round => (
-            <div key={round.id} style={{ marginBottom:14 }}>
-              <div style={{ fontSize:11,color:"#666",fontWeight:700,marginBottom:6 }}>{round.label} (+{round.pts} each)</div>
-              {round.matchIds.map(mid => {
-                const actual = results.knockoutWinners?.[mid];
-                if (!actual) return null;
+        <div style={{ overflowX:"auto" }}>
+          <table style={{ width:"100%",borderCollapse:"collapse",fontSize:13 }}>
+            <thead>
+              <tr>
+                <th style={th({ textAlign:"left",width:32 })}>#</th>
+                <th style={th({ textAlign:"left" })}>Player</th>
+                <th style={th({ textAlign:"right" })}>Outcomes</th>
+                <th style={th({ textAlign:"right" })}>Table</th>
+                <th style={th({ textAlign:"right" })}>KO</th>
+                <th style={th({ textAlign:"right" })}>Bonus</th>
+                <th style={th({ textAlign:"right", color:"#f97316" })}>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((p, rank) => {
+                const ko = koTotal(p.bd);
                 return (
-                  <div key={mid} style={{ background:"#0c0c18",border:"1px solid #181828",borderRadius:7,padding:"6px 10px",marginBottom:4 }}>
-                    <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4 }}>
-                      <span style={{ fontSize:10,color:"#444" }}>{mid}</span>
-                      <span style={{ fontSize:12,fontWeight:700,color:"#10b981" }}>✓ {flag(actual)} {actual}</span>
-                    </div>
-                    <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
-                      {activePlayers.map((p,pi) => p ? (
-                        <div key={pi} style={{ display:"flex",alignItems:"center",gap:4 }}>
-                          <span style={{ fontSize:11,color:COLORS[pi],fontWeight:700 }}>{p}</span>
-                          <span style={{ fontSize:11,color:"#555" }}>{predictions[pi]?.knockoutWinners?.[mid]||"?"}</span>
-                          {actual && <MiniPts pts={predictions[pi]?.knockoutWinners?.[mid]===actual?round.pts:0}/>}
-                        </div>
-                      ) : null)}
-                    </div>
-                  </div>
+                  <tr key={p.idx} style={{ background: rank%2===0?"#0c0c18":"#0a0a14" }}>
+                    <td style={td({ color:"#555",fontSize:11 })}>{rank+1}</td>
+                    <td style={td({})}>
+                      <span style={{ color:COLORS[p.idx],fontWeight:700 }}>{p.name}</span>
+                    </td>
+                    <td style={td({ textAlign:"right",color:"#aaa" })}>{p.bd.outcomes}</td>
+                    <td style={td({ textAlign:"right",color:"#aaa" })}>{p.bd.table}</td>
+                    <td style={td({ textAlign:"right",color:"#aaa" })}>{ko}</td>
+                    <td style={td({ textAlign:"right",color:"#aaa" })}>{p.bd.bonus}</td>
+                    <td style={td({ textAlign:"right",fontWeight:900,fontSize:17,color:"#f97316" })}>{p.score}</td>
+                  </tr>
                 );
               })}
-            </div>
-          ))}
-
-          {/* Bonus */}
-          <div style={{ marginTop:4,fontSize:10,color:"#444",letterSpacing:1,textTransform:"uppercase",marginBottom:8 }}>Bonus Questions</div>
-          {BONUS_QUESTIONS.map(bq => {
-            const actual=results[`bonus_${bq.id}`];
-            return (
-              <div key={bq.id} style={{ background:"#0c0c18",border:"1px solid #181828",borderRadius:7,padding:"7px 10px",marginBottom:5 }}>
-                <div style={{ fontSize:12,fontWeight:600,marginBottom:4,color:"#ddd" }}>{bq.label}</div>
-                {actual && <div style={{ fontSize:11,color:"#3b82f6",marginBottom:4 }}>✓ {actual}</div>}
-                <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
-                  {activePlayers.map((p,pi) => p ? (
-                    <div key={pi} style={{ display:"flex",alignItems:"center",gap:4 }}>
-                      <span style={{ fontSize:11,color:COLORS[pi],fontWeight:700 }}>{p}</span>
-                      <span style={{ fontSize:11,color:"#555" }}>{predictions[pi]?.bonus?.[bq.id]||"—"}</span>
-                      {actual && <MiniPts pts={predictions[pi]?.bonus?.[bq.id]?.toLowerCase().trim()===actual.toLowerCase().trim()?SCORING.bonusQuestion:0} purple/>}
-                    </div>
-                  ) : null)}
-                </div>
-              </div>
-            );
-          })}
-        </>
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
@@ -849,32 +950,82 @@ function STitle({ children }) {
   );
 }
 function PointsBadge({ pts }) {
-  const bg = pts>=SCORING.exactScore?"#10b98120":pts>=SCORING.correctOutcome?"#f9731620":"#ffffff08";
-  const cl = pts>=SCORING.exactScore?"#10b981":pts>=SCORING.correctOutcome?"#f97316":"#444";
-  const br = pts>=SCORING.exactScore?"#10b98140":pts>=SCORING.correctOutcome?"#f9731640":"#1c1c2c";
+  const on = pts > 0;
   return (
-    <div style={{ width:28,height:28,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:900,background:bg,color:cl,border:`1px solid ${br}`,flexShrink:0 }}>
+    <div style={{ width:28,height:28,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:900,background:on?"#f9731620":"#ffffff08",color:on?"#f97316":"#444",border:`1px solid ${on?"#f9731640":"#1c1c2c"}`,flexShrink:0 }}>
       +{pts}
     </div>
   );
 }
 function MiniPts({ pts, purple }) {
-  const c = purple?(pts>0?"#a855f7":"#333"):(pts>=SCORING.exactScore?"#10b981":pts>=SCORING.correctOutcome?"#f97316":"#333");
+  const c = purple ? (pts>0?"#a855f7":"#333") : (pts>0?"#f97316":"#333");
   return (
     <span style={{ fontSize:10,fontWeight:700,color:c,background:c+"18",borderRadius:3,padding:"1px 5px" }}>
       {pts>0?`+${pts}`:"0"}
     </span>
   );
 }
+
+function findTiedTeams(group, results) {
+  const teams = GROUPS[group];
+  if (!teams) return [];
+  const s = calcGroupStandings(group, teams, results);
+  const tied = new Set();
+  for (let i = 0; i < s.length; i++) {
+    for (let j = i + 1; j < s.length; j++) {
+      if (s[i].pts === s[j].pts && s[i].gd === s[j].gd && s[i].gf === s[j].gf) {
+        tied.add(s[i].team);
+        tied.add(s[j].team);
+      }
+    }
+  }
+  return [...tied];
+}
+
+function TiebreakerSection({ group, results, setTiebreaker }) {
+  const tiedTeams = findTiedTeams(group, results);
+  if (tiedTeams.length === 0) return null;
+  const tb = results.tiebreakers?.[group] || {};
+  const inputStyle = { width:"100%",background:"#080810",border:"1.5px solid #252535",color:"#fff",fontSize:13,textAlign:"center",padding:"4px 6px",borderRadius:5,outline:"none",fontFamily:"inherit" };
+  return (
+    <div style={{ marginTop:12,padding:10,background:"#0d0d18",borderRadius:8,border:"1px solid #252535" }}>
+      <div style={{ fontSize:10,color:"#555",letterSpacing:1,textTransform:"uppercase",marginBottom:8 }}>
+        Tiebreakers — tied teams in Group {group}
+      </div>
+      <div style={{ display:"grid",gridTemplateColumns:"1fr 80px 80px",gap:6,alignItems:"center" }}>
+        <div style={{ fontSize:9,color:"#444",textTransform:"uppercase",letterSpacing:1 }}>Team</div>
+        <div style={{ fontSize:9,color:"#444",textTransform:"uppercase",letterSpacing:1,textAlign:"center" }}>Yellow</div>
+        <div style={{ fontSize:9,color:"#444",textTransform:"uppercase",letterSpacing:1,textAlign:"center" }}>FIFA rank</div>
+        {tiedTeams.flatMap(team => [
+          <div key={team} style={{ fontSize:12,fontWeight:600 }}>{flag(team)} {team}</div>,
+          <input key={team+"_yc"} type="number" min={0} style={inputStyle}
+            value={tb.yellowCards?.[team] ?? ""}
+            onChange={e => setTiebreaker(group, "yellowCards", team, e.target.value === "" ? undefined : parseInt(e.target.value))}
+            placeholder="—"/>,
+          <input key={team+"_fr"} type="number" min={1} style={inputStyle}
+            value={tb.fifaRankings?.[team] ?? ""}
+            onChange={e => setTiebreaker(group, "fifaRankings", team, e.target.value === "" ? undefined : parseInt(e.target.value))}
+            placeholder="—"/>,
+        ])}
+      </div>
+    </div>
+  );
+}
 function GroupTable({ group, teams, results, highlight }) {
+  if (!teams) return null;
   const s = calcGroupStandings(group, teams, results);
   return (
     <div style={{ background:"#0c0c18",borderRadius:8,overflow:"hidden",border:"1px solid #181828",fontSize:12 }}>
-      <div style={{ display:"grid",gridTemplateColumns:"1fr 26px 26px 26px 26px 26px 34px",padding:"4px 10px",background:"#121220",color:"#444",fontSize:9,letterSpacing:1,textTransform:"uppercase" }}>
-        <div>Team</div><div style={{textAlign:"center"}}>W</div><div style={{textAlign:"center"}}>D</div><div style={{textAlign:"center"}}>L</div><div style={{textAlign:"center"}}>GD</div><div style={{textAlign:"center"}}>GF</div><div style={{textAlign:"center",color:"#f97316"}}>Pts</div>
+      <div style={{ display:"grid",gridTemplateColumns:"1fr 26px 26px 26px 34px 34px",padding:"4px 10px",background:"#121220",color:"#444",fontSize:9,letterSpacing:1,textTransform:"uppercase" }}>
+        <div>Team</div>
+        <div style={{textAlign:"center"}}>W</div>
+        <div style={{textAlign:"center"}}>D</div>
+        <div style={{textAlign:"center"}}>L</div>
+        <div style={{textAlign:"center"}}>GD</div>
+        <div style={{textAlign:"center",color:"#f97316"}}>Pts</div>
       </div>
       {s.map((row,i) => (
-        <div key={row.team} style={{ display:"grid",gridTemplateColumns:"1fr 26px 26px 26px 26px 26px 34px",padding:"5px 10px",background:i%2===0?"#0c0c18":"#0a0a14",borderTop:"1px solid #121220" }}>
+        <div key={row.team} style={{ display:"grid",gridTemplateColumns:"1fr 26px 26px 26px 34px 34px",padding:"5px 10px",background:i%2===0?"#0c0c18":"#0a0a14",borderTop:"1px solid #121220" }}>
           <div style={{ display:"flex",alignItems:"center",gap:5 }}>
             {highlight && i<2  && <span style={{ width:3,height:12,borderRadius:1,background:i===0?"#f97316":"#3b82f6",display:"inline-block",flexShrink:0 }}/>}
             {highlight && i===2 && <span style={{ width:3,height:12,borderRadius:1,background:"#555",display:"inline-block",flexShrink:0 }}/>}
@@ -883,8 +1034,7 @@ function GroupTable({ group, teams, results, highlight }) {
           <div style={{textAlign:"center",color:"#888"}}>{row.w}</div>
           <div style={{textAlign:"center",color:"#888"}}>{row.d}</div>
           <div style={{textAlign:"center",color:"#888"}}>{row.l}</div>
-          <div style={{textAlign:"center",color:row.gd>0?"#10b981":row.gd<0?"#f43f5e":"#888"}}>{row.gd>0?"+":""}{row.gd}</div>
-          <div style={{textAlign:"center",color:"#888"}}>{row.gf}</div>
+          <div style={{textAlign:"center",color:row.gd>0?"#10b981":row.gd<0?"#f43f5e":"#888"}}>{row.gd > 0 ? `+${row.gd}` : row.gd}</div>
           <div style={{textAlign:"center",fontWeight:700,color:"#f97316",fontSize:14}}>{row.pts}</div>
         </div>
       ))}
