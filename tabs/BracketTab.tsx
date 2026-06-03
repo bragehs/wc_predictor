@@ -52,10 +52,10 @@ export default function BracketTab({
 
       {isActual && best8.length > 0 && (
         <div style={{ marginBottom:12,padding:10,background:THEME.bgCard,borderRadius:8,border:`1px solid ${THEME.borderCard}` }}>
-          <div style={{ fontSize:10,color:THEME.textMuted,letterSpacing:1,textTransform:"uppercase",marginBottom:6 }}>Best 3rd-place qualifiers</div>
+          <div style={{ fontSize:12,color:THEME.textMuted,letterSpacing:1,textTransform:"uppercase",marginBottom:6 }}>Best 3rd-place qualifiers</div>
           <div style={{ display:"flex",flexWrap:"wrap",gap:4 }}>
             {best8.map(t => (
-              <span key={t.group} style={{ fontSize:11,background:THEME.bgButton,border:`1px solid ${THEME.borderCard}`,borderRadius:4,padding:"2px 8px",color:THEME.textSecondary }}>
+              <span key={t.group} style={{ fontSize:13,background:THEME.bgButton,border:`1px solid ${THEME.borderCard}`,borderRadius:4,padding:"3px 9px",color:THEME.textSecondary }}>
                 <span style={{ color:THEME.gold,fontWeight:700 }}>Grp {t.group}</span> {flag(t.team)} {t.team}
               </span>
             ))}
@@ -65,7 +65,7 @@ export default function BracketTab({
 
       {KNOCKOUT_ROUNDS_META.map(round => (
         <div key={round.id} style={{ marginBottom:16 }}>
-          <div style={{ fontSize:10,color:THEME.textMuted,letterSpacing:1,textTransform:"uppercase",marginBottom:6 }}>{round.label}</div>
+          <div style={{ fontSize:12,color:THEME.textMuted,letterSpacing:1,textTransform:"uppercase",marginBottom:6 }}>{round.label}</div>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:5 }}>
             {round.matchIds.map(mid => {
               const { home, away } = getKnockoutMatchup(mid, r32, koWinners);

@@ -348,7 +348,7 @@ export default function App() {
         .hscroll{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;}
         .hscroll::-webkit-scrollbar{height:3px;}
         .pick-btn{border:none;cursor:pointer;font-family:'Barlow Condensed',Arial;font-size:12px;font-weight:700;padding:6px 10px;border-radius:6px;transition:all 0.15s;text-align:left;width:100%;}
-        .ko-team{flex:1;border:none;cursor:pointer;font-family:'Barlow Condensed',Arial;font-size:11px;font-weight:600;padding:5px 8px;border-radius:5px;transition:all 0.15s;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .ko-team{flex:1;border:none;cursor:pointer;font-family:'Barlow Condensed',Arial;font-size:13px;font-weight:600;padding:6px 10px;border-radius:5px;transition:all 0.15s;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
         .hub-btn{border:none;cursor:pointer;font-family:'Barlow Condensed',Arial;font-size:13px;font-weight:900;padding:5px 10px;border-radius:5px;transition:all 0.15s;letter-spacing:1px;min-width:32px;}
         .sort-btn{background:transparent;border:none;cursor:pointer;color:${THEME.textMuted};font-size:13px;padding:1px 3px;line-height:1;transition:color 0.1s;}
         .sort-btn:hover{color:${THEME.textSecondary};}
