@@ -1,5 +1,6 @@
 import type { AllPredictions, AllResults } from "../types/index";
 import { GROUPS, flag } from "../data";
+import { THEME } from "../theme";
 import { buildR32Bracket, getKnockoutMatchup, KNOCKOUT_ROUNDS_META } from "../bracketLogic";
 import { buildPredQualifiers } from "../helpers";
 
@@ -44,8 +45,8 @@ export default function BracketPredictions({
     <div>
       <div style={{ marginBottom:18 }}>
         <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8 }}>
-          <div style={{ fontSize:13,fontWeight:700,color:"#ddd",letterSpacing:1 }}>Best 3rd-place teams — pick 8</div>
-          <div style={{ fontSize:12,color:thirdPicks.length===8?"#10b981":"#f97316",fontWeight:700 }}>
+          <div style={{ fontSize:13,fontWeight:700,color:THEME.textPrimary,letterSpacing:1 }}>Best 3rd-place teams — pick 8</div>
+          <div style={{ fontSize:12,color:thirdPicks.length===8?THEME.green:THEME.gold,fontWeight:700 }}>
             {thirdPicks.length}/8 selected
           </div>
         </div>
@@ -55,9 +56,9 @@ export default function BracketPredictions({
             const full = !sel && thirdPicks.length >= 8;
             return (
               <button key={group} onClick={() => toggleThird(group)} disabled={full || !isEditable}
-                style={{ background:sel?"#f97316":"#12121c",border:`1px solid ${sel?"#f97316":"#252535"}`,borderRadius:6,padding:"6px 8px",cursor:(full||!isEditable)?"default":"pointer",opacity:(full||(!isEditable&&!sel))?0.4:1,textAlign:"left" }}>
-                <div style={{ fontSize:9,color:sel?"#000":"#666",letterSpacing:1,textTransform:"uppercase" }}>Group {group}</div>
-                <div style={{ fontSize:11,fontWeight:700,color:sel?"#000":"#ccc",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>
+                style={{ background:sel?THEME.gold:THEME.bgButton,border:`1px solid ${sel?THEME.gold:THEME.borderCard}`,borderRadius:6,padding:"6px 8px",cursor:(full||!isEditable)?"default":"pointer",opacity:(full||(!isEditable&&!sel))?0.4:1,textAlign:"left" }}>
+                <div style={{ fontSize:9,color:sel?"#000":THEME.textMuted,letterSpacing:1,textTransform:"uppercase" }}>Group {group}</div>
+                <div style={{ fontSize:11,fontWeight:700,color:sel?"#000":THEME.textSecondary,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>
                   {flag(team)} {team}
                 </div>
               </button>
@@ -65,7 +66,7 @@ export default function BracketPredictions({
           })}
         </div>
         {thirdPicks.length !== 8 && (
-          <div style={{ fontSize:11,color:"#555",marginTop:6 }}>
+          <div style={{ fontSize:11,color:THEME.textMuted,marginTop:6 }}>
             Select exactly 8 groups to unlock bracket predictions below.
           </div>
         )}
@@ -74,8 +75,8 @@ export default function BracketPredictions({
       {KNOCKOUT_ROUNDS_META.map(round => (
         <div key={round.id} style={{ marginBottom:20 }}>
           <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:8 }}>
-            <div style={{ fontSize:13,fontWeight:700,color:"#f97316",letterSpacing:1,textTransform:"uppercase" }}>{round.label}</div>
-            <div style={{ fontSize:10,background:"#f9731622",color:"#f97316",border:"1px solid #f9731640",borderRadius:4,padding:"1px 7px",fontWeight:700 }}>+{round.pts} pts</div>
+            <div style={{ fontSize:13,fontWeight:700,color:THEME.gold,letterSpacing:1,textTransform:"uppercase" }}>{round.label}</div>
+            <div style={{ fontSize:10,background:THEME.goldBg,color:THEME.gold,border:`1px solid ${THEME.goldBorder}`,borderRadius:4,padding:"1px 7px",fontWeight:700 }}>+{round.pts} pts</div>
           </div>
           {round.matchIds.map(mid => {
             const { home, away } = getKnockoutMatchup(mid, r32, koWinners);
@@ -87,24 +88,24 @@ export default function BracketPredictions({
             return (
               <div key={mid} style={{ marginBottom:5 }}>
                 <div style={{ display:"flex",alignItems:"center",gap:5 }}>
-                  <span style={{ fontSize:9,color:"#333",minWidth:34,fontWeight:700 }}>{mid}</span>
+                  <span style={{ fontSize:9,color:THEME.textFaint,minWidth:34,fontWeight:700 }}>{mid}</span>
                   <button className="ko-team" onClick={() => bothKnown && pickKO(mid, home)}
-                    style={{ background:winner===home?"#f97316":"#12121c",border:`1px solid ${winner===home?"#f97316":"#252535"}`,color:winner===home?"#000":"#aaa",cursor:(bothKnown&&isEditable)?"pointer":"default",opacity:!bothKnown?0.5:1 }}>
+                    style={{ background:winner===home?THEME.gold:THEME.bgButton,border:`1px solid ${winner===home?THEME.gold:THEME.borderCard}`,color:winner===home?"#000":THEME.textSecondary,cursor:(bothKnown&&isEditable)?"pointer":"default",opacity:!bothKnown?0.5:1 }}>
                     {flag(home)} {home}
                   </button>
-                  <span style={{ color:"#333",fontSize:10,fontWeight:700,flexShrink:0 }}>vs</span>
+                  <span style={{ color:THEME.textFaint,fontSize:10,fontWeight:700,flexShrink:0 }}>vs</span>
                   <button className="ko-team" onClick={() => bothKnown && pickKO(mid, away)}
-                    style={{ background:winner===away?"#f97316":"#12121c",border:`1px solid ${winner===away?"#f97316":"#252535"}`,color:winner===away?"#000":"#aaa",cursor:(bothKnown&&isEditable)?"pointer":"default",opacity:!bothKnown?0.5:1 }}>
+                    style={{ background:winner===away?THEME.gold:THEME.bgButton,border:`1px solid ${winner===away?THEME.gold:THEME.borderCard}`,color:winner===away?"#000":THEME.textSecondary,cursor:(bothKnown&&isEditable)?"pointer":"default",opacity:!bothKnown?0.5:1 }}>
                     {flag(away)} {away}
                   </button>
                   {actual && (
-                    <span style={{ fontSize:10,fontWeight:700,color:correct?"#10b981":wrong?"#f43f5e":"#444",background:correct?"#10b98118":wrong?"#f43f5e18":"#ffffff08",borderRadius:3,padding:"1px 6px",flexShrink:0 }}>
+                    <span style={{ fontSize:10,fontWeight:700,color:correct?THEME.green:wrong?THEME.red:THEME.textMuted,background:correct?THEME.greenBg:wrong?THEME.redBg:"#ffffff08",borderRadius:3,padding:"1px 6px",flexShrink:0 }}>
                       {correct ? `+${round.pts}` : wrong ? "✗" : "?"}
                     </span>
                   )}
                 </div>
                 {!bothKnown && (
-                  <div style={{ fontSize:9,color:"#333",paddingLeft:40,marginTop:1 }}>
+                  <div style={{ fontSize:9,color:THEME.textFaint,paddingLeft:40,marginTop:1 }}>
                     Predict prior rounds first
                   </div>
                 )}

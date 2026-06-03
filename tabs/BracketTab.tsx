@@ -1,5 +1,6 @@
 import type { AllPredictions, AllResults, BracketView } from "../types/index";
 import { COLORS } from "../config";
+import { THEME } from "../theme";
 import {
   getQualifiers, buildR32Bracket, getKnockoutMatchup,
   getBestThirdPlaces, KNOCKOUT_ROUNDS_META,
@@ -38,24 +39,24 @@ export default function BracketTab({
       <STitle>Knockout Bracket</STitle>
       <div className="hscroll" style={{ marginBottom:14 }}>
         <button className="grp-btn" onClick={() => setBracketView("actual")}
-          style={{ background:isActual?"#3b82f6":"#12121c",color:isActual?"#fff":"#888",border:`1px solid ${isActual?"#3b82f6":"#222"}`,flexShrink:0 }}>
+          style={{ background:isActual?THEME.blue:THEME.bgButton,color:isActual?"#fff":THEME.textSecondary,border:`1px solid ${isActual?THEME.blue:THEME.borderCard}`,flexShrink:0 }}>
           Actual
         </button>
         {activePlayers.map((p, i) => p ? (
           <button key={i} className="grp-btn" onClick={() => setBracketView(i)}
-            style={{ background:bracketView===i?COLORS[i]:"#12121c",color:bracketView===i?"#000":"#888",border:`1px solid ${bracketView===i?COLORS[i]:"#222"}`,flexShrink:0 }}>
+            style={{ background:bracketView===i?COLORS[i]:THEME.bgButton,color:bracketView===i?"#000":THEME.textSecondary,border:`1px solid ${bracketView===i?COLORS[i]:THEME.borderCard}`,flexShrink:0 }}>
             {p}
           </button>
         ) : null)}
       </div>
 
       {isActual && best8.length > 0 && (
-        <div style={{ marginBottom:12,padding:10,background:"#0d0d18",borderRadius:8,border:"1px solid #1c1c2c" }}>
-          <div style={{ fontSize:10,color:"#444",letterSpacing:1,textTransform:"uppercase",marginBottom:6 }}>Best 3rd-place qualifiers</div>
+        <div style={{ marginBottom:12,padding:10,background:THEME.bgCard,borderRadius:8,border:`1px solid ${THEME.borderCard}` }}>
+          <div style={{ fontSize:10,color:THEME.textMuted,letterSpacing:1,textTransform:"uppercase",marginBottom:6 }}>Best 3rd-place qualifiers</div>
           <div style={{ display:"flex",flexWrap:"wrap",gap:4 }}>
             {best8.map(t => (
-              <span key={t.group} style={{ fontSize:11,background:"#181828",border:"1px solid #252535",borderRadius:4,padding:"2px 8px",color:"#aaa" }}>
-                <span style={{ color:"#f97316",fontWeight:700 }}>Grp {t.group}</span> {flag(t.team)} {t.team}
+              <span key={t.group} style={{ fontSize:11,background:THEME.bgButton,border:`1px solid ${THEME.borderCard}`,borderRadius:4,padding:"2px 8px",color:THEME.textSecondary }}>
+                <span style={{ color:THEME.gold,fontWeight:700 }}>Grp {t.group}</span> {flag(t.team)} {t.team}
               </span>
             ))}
           </div>
@@ -64,7 +65,7 @@ export default function BracketTab({
 
       {KNOCKOUT_ROUNDS_META.map(round => (
         <div key={round.id} style={{ marginBottom:16 }}>
-          <div style={{ fontSize:10,color:"#444",letterSpacing:1,textTransform:"uppercase",marginBottom:6 }}>{round.label}</div>
+          <div style={{ fontSize:10,color:THEME.textMuted,letterSpacing:1,textTransform:"uppercase",marginBottom:6 }}>{round.label}</div>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:5 }}>
             {round.matchIds.map(mid => {
               const { home, away } = getKnockoutMatchup(mid, r32, koWinners);

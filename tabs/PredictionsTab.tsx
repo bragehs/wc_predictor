@@ -1,6 +1,7 @@
 import type { AllPredictions, AllResults, MatchOutcome, MatchPrediction } from "../types/index";
 import { GROUPS, GROUP_MATCHES, flag } from "../data";
 import { BONUS_QUESTIONS, COLORS } from "../config";
+import { THEME } from "../theme";
 import { pointsForOutcome } from "../helpers";
 import STitle from "../components/STitle";
 import PointsBadge from "../components/PointsBadge";
@@ -40,13 +41,13 @@ export default function PredictionsTab({
       <STitle>Predictions</STitle>
 
       {isLocked && (
-        <div style={{ background:"#1c1400",border:"1px solid #f9731633",borderRadius:8,padding:"10px 14px",marginBottom:14,fontSize:13,color:"#f97316",fontFamily:"'Barlow',Arial" }}>
+        <div style={{ background:THEME.bgCard,border:`1px solid ${THEME.blueBorder}`,borderRadius:8,padding:"10px 14px",marginBottom:14,fontSize:13,color:THEME.blue,fontFamily:"'Barlow',Arial" }}>
           🔒 Predictions locked{lockDate ? ` since ${lockDate.toLocaleDateString("no-NO", {day:"numeric",month:"long",year:"numeric"})}` : ""}. Contact the organizer to change.
         </div>
       )}
 
       {isAdmin && (
-        <div style={{ background:"#001c0a",border:"1px solid #10b98133",borderRadius:8,padding:"8px 14px",marginBottom:14,fontSize:12,color:"#10b981",fontFamily:"'Barlow',Arial" }}>
+        <div style={{ background:THEME.bgCard,border:`1px solid ${THEME.greenBorder}`,borderRadius:8,padding:"8px 14px",marginBottom:14,fontSize:12,color:THEME.green,fontFamily:"'Barlow',Arial" }}>
           Admin mode — editing all predictions.
         </div>
       )}
@@ -54,7 +55,7 @@ export default function PredictionsTab({
       <div className="hscroll" style={{ marginBottom:12 }}>
         {activePlayers.map((p, i) => p ? (
           <button key={i} className="grp-btn" onClick={() => setSelectedPlayer(i)}
-            style={{ background:selectedPlayer===i?COLORS[i]:"#12121c",color:selectedPlayer===i?"#000":"#aaa",border:`1px solid ${selectedPlayer===i?COLORS[i]:"#222"}`,flexShrink:0 }}>
+            style={{ background:selectedPlayer===i?COLORS[i]:THEME.bgButton,color:selectedPlayer===i?"#000":THEME.textSecondary,border:`1px solid ${selectedPlayer===i?COLORS[i]:THEME.borderCard}`,flexShrink:0 }}>
             {p || `P${i + 1}`}
           </button>
         ) : null)}
@@ -63,16 +64,16 @@ export default function PredictionsTab({
       <div style={{ display:"flex",gap:5,flexWrap:"wrap",marginBottom:12 }}>
         {Object.keys(GROUPS).map(g => (
           <button key={g} className="grp-btn" onClick={() => setGroupFilter(g)}
-            style={{ background:groupFilter===g?"#f97316":"#12121c",color:groupFilter===g?"#000":"#888",border:`1px solid ${groupFilter===g?"#f97316":"#222"}` }}>
+            style={{ background:groupFilter===g?THEME.gold:THEME.bgButton,color:groupFilter===g?"#000":THEME.textSecondary,border:`1px solid ${groupFilter===g?THEME.gold:THEME.borderCard}` }}>
             {g}
           </button>
         ))}
         <button className="grp-btn" onClick={() => setGroupFilter("BONUS")}
-          style={{ background:groupFilter==="BONUS"?"#a855f7":"#12121c",color:groupFilter==="BONUS"?"#fff":"#888",border:`1px solid ${groupFilter==="BONUS"?"#a855f7":"#222"}` }}>
+          style={{ background:groupFilter==="BONUS"?THEME.purple:THEME.bgButton,color:groupFilter==="BONUS"?"#fff":THEME.textSecondary,border:`1px solid ${groupFilter==="BONUS"?THEME.purple:THEME.borderCard}` }}>
           Bonus
         </button>
         <button className="grp-btn" onClick={() => setGroupFilter("BRACKET")}
-          style={{ background:groupFilter==="BRACKET"?"#f43f5e":"#12121c",color:groupFilter==="BRACKET"?"#fff":"#888",border:`1px solid ${groupFilter==="BRACKET"?"#f43f5e":"#222"}` }}>
+          style={{ background:groupFilter==="BRACKET"?THEME.red:THEME.bgButton,color:groupFilter==="BRACKET"?"#fff":THEME.textSecondary,border:`1px solid ${groupFilter==="BRACKET"?THEME.red:THEME.borderCard}` }}>
           Bracket
         </button>
       </div>
@@ -88,7 +89,7 @@ export default function PredictionsTab({
         );
         return (
           <>
-            <div style={{ fontSize:10,color:"#444",letterSpacing:1,textTransform:"uppercase",marginBottom:8 }}>
+            <div style={{ fontSize:10,color:THEME.textFaint,letterSpacing:1,textTransform:"uppercase",marginBottom:8 }}>
               Group {groupFilter} — {activePlayers[pi] || `Player ${pi + 1}`}'s predictions
             </div>
             {GROUP_MATCHES.filter(m => m.group === groupFilter).map(m => {
@@ -97,8 +98,8 @@ export default function PredictionsTab({
               const outcome = mp.outcome;
               return (
                 <div key={m.id} className="match-row">
-                  <span style={{ fontSize:10,color:"#444",minWidth:42,flexShrink:0 }}>{m.date}</span>
-                  <span style={{ fontSize:12,flex:1,textAlign:"right",fontWeight:600,whiteSpace:"nowrap" }}>{flag(m.home)} {m.home}</span>
+                  <span style={{ fontSize:10,color:THEME.textFaint,minWidth:42,flexShrink:0 }}>{m.date}</span>
+                  <span style={{ fontSize:12,flex:1,textAlign:"right",fontWeight:600,whiteSpace:"nowrap",color:THEME.textPrimary }}>{flag(m.home)} {m.home}</span>
                   <div style={{ display:"flex",gap:3,flexShrink:0 }}>
                     {(["H","D","A"] as const).map(val => {
                       const label = val === "H" ? "H" : val === "D" ? "U" : "B";
@@ -106,9 +107,9 @@ export default function PredictionsTab({
                         <button key={val} className="hub-btn"
                           onClick={() => isEditable && setPred(pi, m.id, "outcome", outcome === val ? null : val)}
                           style={{
-                            background: outcome === val ? "#f97316" : "#0d0d1a",
-                            color:      outcome === val ? "#000" : "#555",
-                            border:     `1.5px solid ${outcome === val ? "#f97316" : "#252535"}`,
+                            background: outcome === val ? THEME.gold : THEME.bgInput,
+                            color:      outcome === val ? "#000" : THEME.textMuted,
+                            border:     `1.5px solid ${outcome === val ? THEME.gold : THEME.borderInput}`,
                             cursor:     isEditable ? "pointer" : "default",
                             opacity:    isEditable ? 1 : 0.6,
                           }}>
@@ -117,15 +118,15 @@ export default function PredictionsTab({
                       );
                     })}
                   </div>
-                  <span style={{ fontSize:12,flex:1,fontWeight:600,whiteSpace:"nowrap" }}>{flag(m.away)} {m.away}</span>
+                  <span style={{ fontSize:12,flex:1,fontWeight:600,whiteSpace:"nowrap",color:THEME.textPrimary }}>{flag(m.away)} {m.away}</span>
                   {actual != null && <PointsBadge pts={pointsForOutcome(mp, actual)}/>}
                 </div>
               );
             })}
             <div style={{ marginTop:12 }}>
-              <div style={{ fontSize:10,color:"#444",letterSpacing:1,textTransform:"uppercase",marginBottom:4 }}>
+              <div style={{ fontSize:10,color:THEME.textFaint,letterSpacing:1,textTransform:"uppercase",marginBottom:4 }}>
                 Predicted standings
-                {isEditable && <span style={{ color:"#333",marginLeft:6,textTransform:"none",letterSpacing:0 }}>— ↑↓ swap tied teams</span>}
+                {isEditable && <span style={{ color:THEME.borderCard,marginLeft:6,textTransform:"none",letterSpacing:0 }}>— ↑↓ swap tied teams</span>}
               </div>
               <GroupTableEditable
                 group={groupFilter}
@@ -150,8 +151,8 @@ export default function PredictionsTab({
             return (
               <div key={bq.id} style={{ marginBottom:16 }}>
                 <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:6 }}>
-                  <span style={{ fontSize:13,fontWeight:700,color:"#ddd" }}>{bq.label}</span>
-                  <span style={{ fontSize:10,background:"#f9731622",color:"#f97316",border:"1px solid #f9731640",borderRadius:4,padding:"1px 7px",fontWeight:700 }}>+{bq.pts} pts</span>
+                  <span style={{ fontSize:13,fontWeight:700,color:THEME.textPrimary }}>{bq.label}</span>
+                  <span style={{ fontSize:10,background:THEME.goldBg,color:THEME.gold,border:`1px solid ${THEME.goldBorder}`,borderRadius:4,padding:"1px 7px",fontWeight:700 }}>+{bq.pts} pts</span>
                 </div>
                 <div style={{ display:"flex",gap:8,alignItems:"center" }}>
                   <input className="bonus-input" placeholder="Your answer…" value={playerBonus}
@@ -161,7 +162,7 @@ export default function PredictionsTab({
                   />
                   {actual && <PointsBadge pts={correct ? bq.pts : 0}/>}
                 </div>
-                {actual && <div style={{ fontSize:11,color:"#3b82f6",marginTop:3 }}>Actual: {actual}</div>}
+                {actual && <div style={{ fontSize:11,color:THEME.blue,marginTop:3 }}>Actual: {actual}</div>}
               </div>
             );
           })}

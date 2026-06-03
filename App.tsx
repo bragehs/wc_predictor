@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import type { MatchPrediction, TabName, AllPredictions, AllResults, MatchOutcome, BracketView, ScoreBreakdown } from "./types/index.ts";
 import { SCORING, BONUS_QUESTIONS, MAX_PLAYERS, COLORS, TABS, WinnerPoints } from "./config.ts";
+import { THEME } from "./theme.ts";
 import { GROUPS, GROUP_MATCHES } from "./data.js";
 import { calcGroupStandings, getQualifiers, buildR32Bracket, KNOCKOUT_ROUNDS_META } from "./bracketLogic.ts";
 import { supabase } from "./supabase.ts";
@@ -325,55 +326,55 @@ export default function App() {
   const scores = activePlayers.map((_, i) => calcScore(i));
 
   if (!loaded) return (
-    <div style={{ display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#080810",color:"#fff",fontFamily:"monospace" }}>
+    <div style={{ display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:THEME.bgPage,color:THEME.textPrimary,fontFamily:"monospace" }}>
       Loading...
     </div>
   );
 
   return (
-    <div style={{ minHeight:"100vh",background:"#080810",fontFamily:"'Barlow Condensed','Arial Narrow',Arial,sans-serif",color:"#f0f0f0",paddingBottom:80 }}>
+    <div style={{ minHeight:"100vh",background:THEME.bgPage,fontFamily:"'Barlow Condensed','Arial Narrow',Arial,sans-serif",color:THEME.textPrimary,paddingBottom:80 }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500&display=swap');
         *{box-sizing:border-box;}
         ::-webkit-scrollbar{width:4px;height:4px;}
-        ::-webkit-scrollbar-track{background:#111;}
-        ::-webkit-scrollbar-thumb{background:#333;border-radius:2px;}
+        ::-webkit-scrollbar-track{background:#e8f5ec;}
+        ::-webkit-scrollbar-thumb{background:${THEME.borderCard};border-radius:2px;}
         .tab-btn{border:none;cursor:pointer;font-family:'Barlow Condensed',Arial;font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:8px 14px;transition:all 0.15s;background:transparent;}
-        .match-row{display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;background:#12121c;border:1px solid #1c1c2c;margin-bottom:5px;}
+        .match-row{display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;background:${THEME.bgButton};border:1px solid ${THEME.borderMuted};margin-bottom:5px;}
         .grp-btn{border:none;cursor:pointer;font-family:'Barlow Condensed',Arial;font-size:12px;font-weight:700;padding:5px 11px;border-radius:4px;transition:all 0.15s;letter-spacing:1px;}
-        .bonus-input{width:100%;background:#080810;border:1.5px solid #252535;color:#fff;font-size:14px;padding:7px 10px;border-radius:6px;outline:none;font-family:'Barlow',Arial;}
-        .bonus-input:focus{border-color:#f97316;}
-        .bonus-input.actual{border-color:#3b82f6;}
+        .bonus-input{width:100%;background:${THEME.bgInput};border:1.5px solid ${THEME.borderInput};color:${THEME.textPrimary};font-size:14px;padding:7px 10px;border-radius:6px;outline:none;font-family:'Barlow',Arial;}
+        .bonus-input:focus{border-color:${THEME.gold};}
+        .bonus-input.actual{border-color:${THEME.blue};}
         .hscroll{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;}
         .hscroll::-webkit-scrollbar{height:3px;}
         .pick-btn{border:none;cursor:pointer;font-family:'Barlow Condensed',Arial;font-size:12px;font-weight:700;padding:6px 10px;border-radius:6px;transition:all 0.15s;text-align:left;width:100%;}
         .ko-team{flex:1;border:none;cursor:pointer;font-family:'Barlow Condensed',Arial;font-size:11px;font-weight:600;padding:5px 8px;border-radius:5px;transition:all 0.15s;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
         .hub-btn{border:none;cursor:pointer;font-family:'Barlow Condensed',Arial;font-size:13px;font-weight:900;padding:5px 10px;border-radius:5px;transition:all 0.15s;letter-spacing:1px;min-width:32px;}
-        .sort-btn{background:transparent;border:none;cursor:pointer;color:#555;font-size:13px;padding:1px 3px;line-height:1;transition:color 0.1s;}
-        .sort-btn:hover{color:#aaa;}
-        .sort-btn:disabled{cursor:default;color:#252535;}
-        .score-input{width:36px;height:32px;background:#080810;border:1.5px solid #252535;color:#fff;font-size:16px;font-weight:700;text-align:center;border-radius:5px;outline:none;font-family:inherit;}
-        .score-input:focus{border-color:#3b82f6;}
-        .score-input.actual{border-color:#3b82f6;background:#0c1118;}
-        .score-input.actual:focus{border-color:#60a5fa;}
+        .sort-btn{background:transparent;border:none;cursor:pointer;color:${THEME.textMuted};font-size:13px;padding:1px 3px;line-height:1;transition:color 0.1s;}
+        .sort-btn:hover{color:${THEME.textSecondary};}
+        .sort-btn:disabled{cursor:default;color:${THEME.borderInput};}
+        .score-input{width:36px;height:32px;background:${THEME.bgInput};border:1.5px solid ${THEME.borderInput};color:${THEME.textPrimary};font-size:16px;font-weight:700;text-align:center;border-radius:5px;outline:none;font-family:inherit;}
+        .score-input:focus{border-color:${THEME.blue};}
+        .score-input.actual{border-color:${THEME.blue};background:${THEME.blueBg};}
+        .score-input.actual:focus{border-color:${THEME.blue};}
       `}</style>
 
-      <div style={{ background:"linear-gradient(135deg,#1a0800 0%,#080810 60%)",padding:"18px 16px 0",borderBottom:"1px solid #181828" }}>
+      <div style={{ background:THEME.bgHeader,padding:"18px 16px 0",borderBottom:`1px solid ${THEME.borderHeader}` }}>
         <div style={{ maxWidth:760,margin:"0 auto" }}>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:6 }}>
             <div>
-              <div style={{ fontSize:20,fontWeight:900,letterSpacing:2,textTransform:"uppercase",lineHeight:1 }}>FIFA World Cup 2026</div>
-              <div style={{ fontSize:11,color:"#f97316",letterSpacing:3,textTransform:"uppercase",fontWeight:600 }}>Prediction Tracker</div>
+              <div style={{ fontSize:20,fontWeight:900,letterSpacing:2,textTransform:"uppercase",lineHeight:1,color:THEME.headerText }}>FIFA World Cup 2026</div>
+              <div style={{ fontSize:11,color:THEME.headerSubtext,letterSpacing:3,textTransform:"uppercase",fontWeight:600 }}>Prediction Tracker</div>
             </div>
-            {isAdmin && <div style={{ fontSize:10,color:"#10b981",letterSpacing:1,fontWeight:700 }}>ADMIN</div>}
+            {isAdmin && <div style={{ fontSize:10,color:THEME.headerSubtext,letterSpacing:1,fontWeight:700,background:"rgba(255,255,255,0.15)",borderRadius:4,padding:"2px 8px" }}>ADMIN</div>}
           </div>
           {activePlayers.some(p => p) && (
             <div className="hscroll" style={{ marginTop:8 }}>
               {activePlayers.map((p, i) => p ? (
-                <div key={i} style={{ flexShrink:0,background:`${COLORS[i]}15`,border:`1.5px solid ${COLORS[i]}44`,borderRadius:8,padding:"4px 10px",minWidth:70,textAlign:"center" }}>
+                <div key={i} style={{ flexShrink:0,background:"rgba(255,255,255,0.15)",backdropFilter:"blur(4px)",border:"1.5px solid rgba(255,255,255,0.3)",borderRadius:8,padding:"4px 10px",minWidth:70,textAlign:"center" }}>
                   <div style={{ fontSize:11,fontWeight:700,color:COLORS[i],whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:80 }}>{p}</div>
-                  <div style={{ fontSize:20,fontWeight:900,color:"#fff",lineHeight:1 }}>{scores[i]}</div>
-                  <div style={{ fontSize:9,color:"#666",letterSpacing:1 }}>PTS</div>
+                  <div style={{ fontSize:20,fontWeight:900,color:THEME.headerText,lineHeight:1 }}>{scores[i]}</div>
+                  <div style={{ fontSize:9,color:THEME.headerMuted,letterSpacing:1 }}>PTS</div>
                 </div>
               ) : null)}
             </div>
@@ -381,7 +382,7 @@ export default function App() {
           <div style={{ display:"flex",gap:0,marginTop:4,overflowX:"auto" }}>
             {TABS.map(t => (
               <button key={t} className="tab-btn" onClick={() => setTab(t)}
-                style={{ color:tab===t?"#f97316":"#666",borderBottom:tab===t?"2px solid #f97316":"2px solid transparent",flexShrink:0 }}>
+                style={{ color:tab===t?THEME.headerTabActive:THEME.headerMuted,borderBottom:tab===t?`2px solid ${THEME.headerTabActive}`:"2px solid transparent",flexShrink:0 }}>
                 {t}
               </button>
             ))}

@@ -1,5 +1,6 @@
 import type { AllResults } from "../types/index";
 import { GROUPS, flag } from "../data";
+import { THEME } from "../theme";
 import { calcGroupStandings } from "../bracketLogic";
 
 interface TiebreakerSectionProps {
@@ -29,18 +30,18 @@ export default function TiebreakerSection({ group, results, setTiebreaker, isLoc
   const tiedTeams = findTiedTeams(group, results);
   if (tiedTeams.length === 0) return null;
   const tb = (results.tiebreakers as Record<string, { yellowCards?: Record<string, number>; fifaRankings?: Record<string, number> }> | undefined)?.[group] ?? {};
-  const inputStyle: React.CSSProperties = { width:"100%",background:"#080810",border:"1.5px solid #252535",color:"#fff",fontSize:13,textAlign:"center",padding:"4px 6px",borderRadius:5,outline:"none",fontFamily:"inherit" };
+  const inputStyle: React.CSSProperties = { width:"100%",background:THEME.bgInput,border:`1.5px solid ${THEME.borderInput}`,color:THEME.textPrimary,fontSize:13,textAlign:"center",padding:"4px 6px",borderRadius:5,outline:"none",fontFamily:"inherit" };
   return (
-    <div style={{ marginTop:12,padding:10,background:"#0d0d18",borderRadius:8,border:"1px solid #252535" }}>
-      <div style={{ fontSize:10,color:"#555",letterSpacing:1,textTransform:"uppercase",marginBottom:8 }}>
+    <div style={{ marginTop:12,padding:10,background:THEME.bgCard,borderRadius:8,border:`1px solid ${THEME.borderCard}` }}>
+      <div style={{ fontSize:10,color:THEME.textMuted,letterSpacing:1,textTransform:"uppercase",marginBottom:8 }}>
         Tiebreakers — tied teams in Group {group}
       </div>
       <div style={{ display:"grid",gridTemplateColumns:"1fr 80px 80px",gap:6,alignItems:"center" }}>
-        <div style={{ fontSize:9,color:"#444",textTransform:"uppercase",letterSpacing:1 }}>Team</div>
-        <div style={{ fontSize:9,color:"#444",textTransform:"uppercase",letterSpacing:1,textAlign:"center" }}>Yellow</div>
-        <div style={{ fontSize:9,color:"#444",textTransform:"uppercase",letterSpacing:1,textAlign:"center" }}>FIFA rank</div>
+        <div style={{ fontSize:9,color:THEME.textFaint,textTransform:"uppercase",letterSpacing:1 }}>Team</div>
+        <div style={{ fontSize:9,color:THEME.textFaint,textTransform:"uppercase",letterSpacing:1,textAlign:"center" }}>Yellow</div>
+        <div style={{ fontSize:9,color:THEME.textFaint,textTransform:"uppercase",letterSpacing:1,textAlign:"center" }}>FIFA rank</div>
         {tiedTeams.flatMap(team => [
-          <div key={team} style={{ fontSize:12,fontWeight:600 }}>{flag(team)} {team}</div>,
+          <div key={team} style={{ fontSize:12,fontWeight:600,color:THEME.textPrimary }}>{flag(team)} {team}</div>,
           <input key={team + "_yc"} type="number" min={0} style={{ ...inputStyle, opacity: isLocked ? 0.5 : 1 }}
             value={tb.yellowCards?.[team] ?? ""}
             onChange={e => !isLocked && setTiebreaker(group, "yellowCards", team, e.target.value === "" ? undefined : parseInt(e.target.value))}
