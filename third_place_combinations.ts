@@ -5,7 +5,7 @@
 //        index 0=M79(1A), 1=M85(1B), 2=M81(1D), 3=M74(1E),
 //        index 4=M82(1G), 5=M77(1I), 6=M87(1K), 7=M80(1L)
 //
-export const RAW_SCENARIOS = {
+export const RAW_SCENARIOS: Record<string, string[]> = {
   "EFGHIJKL": ["E","J","I","F","H","G","L","K"],
   "DFGHIJKL": ["H","G","I","D","J","F","L","K"],
   "DEGHIJKL": ["E","J","I","D","H","G","L","K"],

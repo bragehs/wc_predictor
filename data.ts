@@ -1,5 +1,6 @@
-// ── Flags ─────────────────────────────────────────────────────────────────────
-export const FLAGS = {
+import type { GroupMatch } from "./types/index";
+
+export const FLAGS: Record<string, string> = {
   Mexico: "🇲🇽", "South Africa": "🇿🇦", "South Korea": "🇰🇷", Czechia: "🇨🇿",
   Canada: "🇨🇦", "Bosnia-Herzegovina": "🇧🇦", Qatar: "🇶🇦", Switzerland: "🇨🇭",
   Brazil: "🇧🇷", Morocco: "🇲🇦", Haiti: "🇭🇹", Scotland: "🏴󠁧󠁢󠁳󠁣󠁴󠁿",
@@ -14,11 +15,11 @@ export const FLAGS = {
   England: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", Croatia: "🇭🇷", Ghana: "🇬🇭", Panama: "🇵🇦",
 };
 
-export const flag = (t) => FLAGS[t] || "🌍";
+export function flag(team: string): string {
+  return FLAGS[team] ?? "🌍";
+}
 
-// ── Groups ────────────────────────────────────────────────────────────────────
-// Teams listed in draw order (pot 1 team first)
-export const GROUPS = {
+export const GROUPS: Record<string, string[]> = {
   A: ["Mexico", "South Africa", "South Korea", "Czechia"],
   B: ["Canada", "Bosnia-Herzegovina", "Qatar", "Switzerland"],
   C: ["Brazil", "Morocco", "Haiti", "Scotland"],
@@ -33,10 +34,7 @@ export const GROUPS = {
   L: ["England", "Croatia", "Ghana", "Panama"],
 };
 
-// ── Group Stage Matches (sorted by date within each group) ────────────────────
-// Matchday 3 pairs are played simultaneously (same date within a group).
-// date format: "Jun DD"
-export const GROUP_MATCHES = [
+export const GROUP_MATCHES: GroupMatch[] = [
   // Group A
   { id:"A1", group:"A", home:"Mexico",       away:"South Africa", date:"Jun 11" },
   { id:"A2", group:"A", home:"South Korea",  away:"Czechia",      date:"Jun 11" },
