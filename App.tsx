@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import type { MatchPrediction, TabName, AllPredictions, AllResults, MatchOutcome, BracketView, ScoreBreakdown } from "./types/index.ts";
-import { SCORING, BONUS_QUESTIONS, MAX_PLAYERS, COLORS, TABS } from "./config.ts";
-import { GROUPS, GROUP_MATCHES } from "./data";
-import { calcGroupStandings, KNOCKOUT_ROUNDS_META } from "./bracketLogic.ts";
+import { SCORING, BONUS_QUESTIONS, MAX_PLAYERS, COLORS, TABS, WinnerPoints } from "./config.ts";
+import { GROUPS, GROUP_MATCHES } from "./data.js";
+import { calcGroupStandings, getQualifiers, buildR32Bracket, KNOCKOUT_ROUNDS_META } from "./bracketLogic.ts";
 import { supabase } from "./supabase.ts";
 import {
   groupIsComplete, pointsForOutcome,
-  getPredEffectiveOrder,
+  getPredEffectiveOrder, buildPredR32,
 } from "./helpers.ts";
 import RulesTab       from "./tabs/RulesTab.tsx";
 import PredictionsTab from "./tabs/PredictionsTab.tsx";
@@ -233,15 +233,30 @@ export default function App() {
       if (pred && actual && pred.toLowerCase().trim() === actual.toLowerCase().trim())
         score += bq.pts;
     });
-    KNOCKOUT_ROUNDS_META.forEach(round => {
-      const koW = predictions[pi]?.knockoutWinners as Record<string, string | null> | undefined;
-      const actKoW = results.knockoutWinners ?? {};
-      round.matchIds.forEach(mid => {
-        const pw = koW?.[mid];
-        const aw = actKoW[mid];
-        if (pw && aw && pw === aw) score += round.pts;
-      });
+    const roundsById = Object.fromEntries(KNOCKOUT_ROUNDS_META.map(r => [r.id, r]));
+    const r32 = roundsById["R32"], r16 = roundsById["R16"];
+    const qf  = roundsById["QF"],  sf  = roundsById["SF"], fin = roundsById["Final"];
+
+    const actualR32Teams = new Set(
+      buildR32Bracket(getQualifiers(results)).flatMap(m => [m.home, m.away]).filter(t => t !== "3rd TBD")
+    );
+    buildPredR32(pi, predictions).forEach(m => {
+      if (m.home !== "3rd TBD" && actualR32Teams.has(m.home)) score += r32.pts;
+      if (m.away !== "3rd TBD" && actualR32Teams.has(m.away)) score += r32.pts;
     });
+
+    const koW    = (predictions[pi]?.knockoutWinners ?? {}) as Record<string, string | null>;
+    const actKoW = (results.knockoutWinners ?? {}) as Record<string, string | null>;
+    const teams  = (ids: string[], src: Record<string, string | null>) =>
+      new Set(ids.map(id => src[id]).filter((t): t is string => !!t));
+    const overlap = (a: Set<string>, b: Set<string>) => [...a].filter(t => b.has(t)).length;
+
+    score += overlap(teams(r32.matchIds, koW), teams(r32.matchIds, actKoW)) * r16.pts;
+    score += overlap(teams(r16.matchIds, koW), teams(r16.matchIds, actKoW)) * qf.pts;
+    score += overlap(teams(qf.matchIds,  koW), teams(qf.matchIds,  actKoW)) * sf.pts;
+    score += overlap(teams(sf.matchIds,  koW), teams(sf.matchIds,  actKoW)) * fin.pts;
+    if (koW["M104"] && actKoW["M104"] && koW["M104"] === actKoW["M104"]) score += WinnerPoints;
+
     return score;
   }
 
@@ -249,6 +264,7 @@ export default function App() {
     let outcomes = 0, table = 0, bonus = 0;
     const knockout: Record<string, number> = {};
     KNOCKOUT_ROUNDS_META.forEach(r => { knockout[r.id] = 0; });
+    knockout["Winner"] = 0;
 
     GROUP_MATCHES.forEach(m => {
       const pred = predictions[pi]?.[m.id] as MatchPrediction | undefined;
@@ -268,15 +284,31 @@ export default function App() {
       if (pred && actual && pred.toLowerCase().trim() === actual.toLowerCase().trim())
         bonus += bq.pts;
     });
-    KNOCKOUT_ROUNDS_META.forEach(round => {
-      const koW = predictions[pi]?.knockoutWinners as Record<string, string | null> | undefined;
-      const actKoW = results.knockoutWinners ?? {};
-      round.matchIds.forEach(mid => {
-        const pw = koW?.[mid];
-        const aw = actKoW[mid];
-        if (pw && aw && pw === aw) knockout[round.id] += round.pts;
-      });
+
+    const roundsById = Object.fromEntries(KNOCKOUT_ROUNDS_META.map(r => [r.id, r]));
+    const r32 = roundsById["R32"], r16 = roundsById["R16"];
+    const qf  = roundsById["QF"],  sf  = roundsById["SF"], fin = roundsById["Final"];
+
+    const actualR32Teams = new Set(
+      buildR32Bracket(getQualifiers(results)).flatMap(m => [m.home, m.away]).filter(t => t !== "3rd TBD")
+    );
+    buildPredR32(pi, predictions).forEach(m => {
+      if (m.home !== "3rd TBD" && actualR32Teams.has(m.home)) knockout["R32"] += r32.pts;
+      if (m.away !== "3rd TBD" && actualR32Teams.has(m.away)) knockout["R32"] += r32.pts;
     });
+
+    const koW    = (predictions[pi]?.knockoutWinners ?? {}) as Record<string, string | null>;
+    const actKoW = (results.knockoutWinners ?? {}) as Record<string, string | null>;
+    const teams  = (ids: string[], src: Record<string, string | null>) =>
+      new Set(ids.map(id => src[id]).filter((t): t is string => !!t));
+    const overlap = (a: Set<string>, b: Set<string>) => [...a].filter(t => b.has(t)).length;
+
+    knockout["R16"]   = overlap(teams(r32.matchIds, koW), teams(r32.matchIds, actKoW)) * r16.pts;
+    knockout["QF"]    = overlap(teams(r16.matchIds, koW), teams(r16.matchIds, actKoW)) * qf.pts;
+    knockout["SF"]    = overlap(teams(qf.matchIds,  koW), teams(qf.matchIds,  actKoW)) * sf.pts;
+    knockout["Final"] = overlap(teams(sf.matchIds,  koW), teams(sf.matchIds,  actKoW)) * fin.pts;
+    if (koW["M104"] && actKoW["M104"] && koW["M104"] === actKoW["M104"]) knockout["Winner"] = WinnerPoints;
+
     return { outcomes, table, bonus, knockout };
   }
 

@@ -6,7 +6,6 @@ export const SCORING: ScoringConfig = {
 };
 
 export const BONUS_QUESTIONS: BonusQuestion[] = [
-  { id: "winner",     label: "Tournament Winner (Vir)",     pts: 30 },
   { id: "top_scorer", label: "Top Scorer (Toppscorer)",     pts: 10 },
 ];
 
@@ -30,19 +29,15 @@ export const COLORS: string[] = [
   "#fb7185",
 ];
 
-export const PLAYER_EMOJIS: string[] = [
-  "🦁","🐉","🦊","🐺","🦅",
-  "🐯","🦈","🐻","🦋","🦓",
-  "🦏","🐘","🦒","🐆","🦬",
-];
-
 export const KNOCKOUT_SCORING: Record<string, number> = {
   R32:   2,
   R16:   2,
   QF:    5,
   SF:    10,
-  Final: 20,
+  Final: 20
 };
+
+export const WinnerPoints = 30;
 
 export const TABS: TabName[] = ["Rules", "Predictions", "Results", "Bracket", "Standings"];
 

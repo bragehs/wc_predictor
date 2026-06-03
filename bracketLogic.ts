@@ -10,6 +10,7 @@ import type {
 } from "./types/index";
 import { GROUPS, GROUP_MATCHES } from "./data";
 import { RAW_SCENARIOS } from "./third_place_combinations";
+import { KNOCKOUT_SCORING } from "./config";
 
 // ── Group Standings ───────────────────────────────────────────────────────────
 
@@ -136,15 +137,15 @@ export const BRACKET_FEEDS: Record<string, [string, string]> = {
 };
 
 export const KNOCKOUT_ROUNDS_META: KnockoutRoundMeta[] = [
-  { id:"R32",   label:"Round of 32",    pts:2,  matchIds:["M73","M74","M75","M76","M77","M78","M79","M80","M81","M82","M83","M84","M85","M86","M87","M88"] },
-  { id:"R16",   label:"Round of 16",    pts:4,  matchIds:["M89","M90","M91","M92","M93","M94","M95","M96"] },
-  { id:"QF",    label:"Quarter-finals", pts:6,  matchIds:["M97","M98","M99","M100"] },
-  { id:"SF",    label:"Semi-finals",    pts:10, matchIds:["M101","M102"] },
-  { id:"Final", label:"Final",          pts:15, matchIds:["M104"] },
+  { id:"R32",   label:"Round of 32",    pts:KNOCKOUT_SCORING["R32"],  matchIds:["M73","M74","M75","M76","M77","M78","M79","M80","M81","M82","M83","M84","M85","M86","M87","M88"] },
+  { id:"R16",   label:"Round of 16",    pts:KNOCKOUT_SCORING["R16"],  matchIds:["M89","M90","M91","M92","M93","M94","M95","M96"] },
+  { id:"QF",    label:"Quarter-finals", pts:KNOCKOUT_SCORING["QF"],  matchIds:["M97","M98","M99","M100"] },
+  { id:"SF",    label:"Semi-finals",    pts:KNOCKOUT_SCORING["SF"], matchIds:["M101","M102"] },
+  { id:"Final", label:"Final",          pts:KNOCKOUT_SCORING["Final"], matchIds:["M104"] }
 ];
 
 export function getMatchRound(matchId: string): KnockoutRoundMeta | null {
-  return KNOCKOUT_ROUNDS_META.find(r => r.matchIds.includes(matchId)) ?? null;
+  return KNOCKOUT_ROUNDS_META.find(r => r.matchIds?.includes(matchId)) ?? null;
 }
 
 export function getKnockoutMatchup(

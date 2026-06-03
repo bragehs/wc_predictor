@@ -77,7 +77,7 @@ export default function PredictionsTab({
         </button>
       </div>
 
-      {!["BONUS", "BRACKET"].includes(groupFilter) && (() => {
+      {GROUPS[groupFilter] !== undefined && (() => {
         const pred = predictions[pi] ?? {};
         const tableOrder = pred.tableOrder as Record<string, string[]> | undefined;
         const outcomes: Record<string, string | null> = Object.fromEntries(
