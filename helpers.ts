@@ -20,6 +20,14 @@ export function groupIsComplete(g: string, results: AllResults): boolean {
   });
 }
 
+export function playerGroupIsComplete(pi: number, g: string, predictions: AllPredictions): boolean {
+  const pred = predictions[pi] ?? {};
+  return GROUP_MATCHES.filter(m => m.group === g).every(m => {
+    const mp = pred[m.id] as MatchPrediction | undefined;
+    return mp?.outcome != null;
+  });
+}
+
 export function pointsForOutcome(pred: MatchPrediction | undefined, actual: unknown): number {
   if (!pred?.outcome) return 0;
   const r = actual as { home?: unknown; away?: unknown } | undefined;

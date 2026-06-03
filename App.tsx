@@ -5,7 +5,7 @@ import { GROUPS, GROUP_MATCHES } from "./data.js";
 import { calcGroupStandings, getQualifiers, buildR32Bracket, KNOCKOUT_ROUNDS_META } from "./bracketLogic.ts";
 import { supabase } from "./supabase.ts";
 import {
-  groupIsComplete, pointsForOutcome,
+  groupIsComplete, playerGroupIsComplete, pointsForOutcome,
   getPredEffectiveOrder, buildPredR32,
 } from "./helpers.ts";
 import RulesTab       from "./tabs/RulesTab.tsx";
@@ -221,6 +221,7 @@ export default function App() {
     });
     Object.entries(GROUPS).forEach(([g, teams]) => {
       if (!groupIsComplete(g, results)) return;
+      if (!playerGroupIsComplete(pi, g, predictions)) return;
       const predOrder = getPredEffectiveOrder(pi, g, predictions).map(r => r.team);
       const actualS   = calcGroupStandings(g, teams, results);
       predOrder.forEach((team, idx) => {
@@ -237,13 +238,17 @@ export default function App() {
     const r32 = roundsById["R32"], r16 = roundsById["R16"];
     const qf  = roundsById["QF"],  sf  = roundsById["SF"], fin = roundsById["Final"];
 
-    const actualR32Teams = new Set(
-      buildR32Bracket(getQualifiers(results)).flatMap(m => [m.home, m.away]).filter(t => t !== "3rd TBD")
-    );
-    buildPredR32(pi, predictions).forEach(m => {
-      if (m.home !== "3rd TBD" && actualR32Teams.has(m.home)) score += r32.pts;
-      if (m.away !== "3rd TBD" && actualR32Teams.has(m.away)) score += r32.pts;
-    });
+    const allGroupsPredicted = Object.keys(GROUPS).every(g => playerGroupIsComplete(pi, g, predictions));
+    const predThirdPlaces = predictions[pi]?.thirdPlaces as string[] | undefined;
+    if (allGroupsPredicted && predThirdPlaces?.length === 8) {
+      const actualR32Teams = new Set(
+        buildR32Bracket(getQualifiers(results)).flatMap(m => [m.home, m.away]).filter(t => t !== "3rd TBD")
+      );
+      buildPredR32(pi, predictions).forEach(m => {
+        if (m.home !== "3rd TBD" && actualR32Teams.has(m.home)) score += r32.pts;
+        if (m.away !== "3rd TBD" && actualR32Teams.has(m.away)) score += r32.pts;
+      });
+    }
 
     const koW    = (predictions[pi]?.knockoutWinners ?? {}) as Record<string, string | null>;
     const actKoW = (results.knockoutWinners ?? {}) as Record<string, string | null>;
@@ -272,6 +277,7 @@ export default function App() {
     });
     Object.entries(GROUPS).forEach(([g, teams]) => {
       if (!groupIsComplete(g, results)) return;
+      if (!playerGroupIsComplete(pi, g, predictions)) return;
       const predOrder = getPredEffectiveOrder(pi, g, predictions).map(r => r.team);
       const actualS   = calcGroupStandings(g, teams, results);
       predOrder.forEach((team, idx) => {
@@ -289,13 +295,17 @@ export default function App() {
     const r32 = roundsById["R32"], r16 = roundsById["R16"];
     const qf  = roundsById["QF"],  sf  = roundsById["SF"], fin = roundsById["Final"];
 
-    const actualR32Teams = new Set(
-      buildR32Bracket(getQualifiers(results)).flatMap(m => [m.home, m.away]).filter(t => t !== "3rd TBD")
-    );
-    buildPredR32(pi, predictions).forEach(m => {
-      if (m.home !== "3rd TBD" && actualR32Teams.has(m.home)) knockout["R32"] += r32.pts;
-      if (m.away !== "3rd TBD" && actualR32Teams.has(m.away)) knockout["R32"] += r32.pts;
-    });
+    const allGroupsPredicted = Object.keys(GROUPS).every(g => playerGroupIsComplete(pi, g, predictions));
+    const predThirdPlaces = predictions[pi]?.thirdPlaces as string[] | undefined;
+    if (allGroupsPredicted && predThirdPlaces?.length === 8) {
+      const actualR32Teams = new Set(
+        buildR32Bracket(getQualifiers(results)).flatMap(m => [m.home, m.away]).filter(t => t !== "3rd TBD")
+      );
+      buildPredR32(pi, predictions).forEach(m => {
+        if (m.home !== "3rd TBD" && actualR32Teams.has(m.home)) knockout["R32"] += r32.pts;
+        if (m.away !== "3rd TBD" && actualR32Teams.has(m.away)) knockout["R32"] += r32.pts;
+      });
+    }
 
     const koW    = (predictions[pi]?.knockoutWinners ?? {}) as Record<string, string | null>;
     const actKoW = (results.knockoutWinners ?? {}) as Record<string, string | null>;
