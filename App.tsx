@@ -4,11 +4,16 @@ import { SCORING, BONUS_QUESTIONS, MAX_PLAYERS, COLORS, TABS, WinnerPoints } fro
 import { THEME } from "./theme.ts";
 import { GROUPS, GROUP_MATCHES } from "./data.js";
 import { calcGroupStandings, getQualifiers, buildR32Bracket, KNOCKOUT_ROUNDS_META } from "./bracketLogic.ts";
-import { supabase } from "./supabase.ts";
 import {
   groupIsComplete, playerGroupIsComplete, pointsForOutcome,
   getPredEffectiveOrder, buildPredR32,
 } from "./helpers.ts";
+import {
+  loadAllData, loadResults,
+  saveMatchPrediction, saveTablePrediction, saveBonusAnswer,
+  saveThirdPlacePicks, saveKnockoutPrediction,
+  saveMatchScore, saveKnockoutWinner, saveTiebreaker, saveBonusIsCorrect,
+} from "./db.ts";
 import RulesTab       from "./tabs/RulesTab.tsx";
 import PredictionsTab from "./tabs/PredictionsTab.tsx";
 import ResultsTab     from "./tabs/ResultsTab.tsx";
@@ -37,76 +42,96 @@ export default function App() {
   const isLocked = !!(lockDate && new Date() > lockDate && !isAdmin);
   const isResultsLocked = resultsLocked && !isAdmin;
 
-  const predSavers = useRef<Record<string, ReturnType<typeof debounce>>>({});
-  function getSavePredFn(playerName: string) {
-    if (!predSavers.current[playerName]) {
-      predSavers.current[playerName] = debounce(async (data: unknown) => {
-        try {
-          await supabase.from("predictions").upsert({
-            player_name: playerName,
-            data,
-            updated_at: new Date().toISOString(),
-          });
-        } catch(e) { console.error("Save predictions failed:", e); }
-      }, 1200);
-    }
-    return predSavers.current[playerName];
+  // ── Per-field debounced savers ─────────────────────────────────────────────
+  const matchPredSavers   = useRef({} as Record<string, (outcome: string | null) => void>);
+  const tablePredSavers   = useRef({} as Record<string, (teams: string[]) => void>);
+  const bonusSavers       = useRef({} as Record<string, (answer: string) => void>);
+  const thirdPlacesSavers = useRef({} as Record<string, (groups: string[]) => void>);
+  const koPredSavers      = useRef({} as Record<string, (winner: string | null) => void>);
+  const matchScoreSavers  = useRef({} as Record<string, (val: string) => void>);
+  const koWinnerSavers    = useRef({} as Record<string, (winner: string | null) => void>);
+  const tiebreakerSaver   = useMemo(() => debounce(
+    (g: string, t: string, team: string, val: number | undefined) =>
+      saveTiebreaker(g, t, team, val).catch(console.error),
+    1000
+  ), []);
+
+  function getMatchPredSaver(playerName: string, matchId: string) {
+    const key = `${playerName}::${matchId}`;
+    if (!matchPredSavers.current[key])
+      matchPredSavers.current[key] = debounce(
+        (outcome: string | null) => saveMatchPrediction(playerName, matchId, outcome).catch(console.error), 1200
+      );
+    return matchPredSavers.current[key];
+  }
+  function getTablePredSaver(playerName: string, groupId: string) {
+    const key = `${playerName}::${groupId}`;
+    if (!tablePredSavers.current[key])
+      tablePredSavers.current[key] = debounce(
+        (teams: string[]) => saveTablePrediction(playerName, groupId, teams).catch(console.error), 1200
+      );
+    return tablePredSavers.current[key];
+  }
+  function getBonusSaver(playerName: string, qid: string) {
+    const key = `${playerName}::${qid}`;
+    if (!bonusSavers.current[key])
+      bonusSavers.current[key] = debounce(
+        (answer: string) => saveBonusAnswer(playerName, qid, answer).catch(console.error), 1200
+      );
+    return bonusSavers.current[key];
+  }
+  function getThirdPlacesSaver(playerName: string) {
+    if (!thirdPlacesSavers.current[playerName])
+      thirdPlacesSavers.current[playerName] = debounce(
+        (groups: string[]) => saveThirdPlacePicks(playerName, groups).catch(console.error), 1200
+      );
+    return thirdPlacesSavers.current[playerName];
+  }
+  function getKOPredSaver(playerName: string, matchId: string) {
+    const key = `${playerName}::${matchId}`;
+    if (!koPredSavers.current[key])
+      koPredSavers.current[key] = debounce(
+        (winner: string | null) => saveKnockoutPrediction(playerName, matchId, winner).catch(console.error), 1200
+      );
+    return koPredSavers.current[key];
+  }
+  function getMatchScoreSaver(matchId: string, side: "home" | "away") {
+    const key = `${matchId}::${side}`;
+    if (!matchScoreSavers.current[key])
+      matchScoreSavers.current[key] = debounce(
+        (val: string) => saveMatchScore(matchId, side, val).catch(console.error), 1000
+      );
+    return matchScoreSavers.current[key];
+  }
+  function getKOWinnerSaver(matchId: string) {
+    if (!koWinnerSavers.current[matchId])
+      koWinnerSavers.current[matchId] = debounce(
+        (winner: string | null) => saveKnockoutWinner(matchId, winner).catch(console.error), 500
+      );
+    return koWinnerSavers.current[matchId];
   }
 
-  const debounceSaveResults = useMemo(() => debounce(async (data: AllResults) => {
-    try {
-      await supabase.from("results").upsert({ id: 1, data, updated_at: new Date().toISOString() });
-    } catch(e) { console.error("Save results failed:", e); }
-  }, 1000), []);
-
+  // ── Load ───────────────────────────────────────────────────────────────────
   useEffect(() => {
-    async function load() {
-      try {
-        const [{ data: settingsRows }, { data: rRow }, { data: predRows }] = await Promise.all([
-          supabase.from("settings").select("*"),
-          supabase.from("results").select("data").eq("id", 1).single(),
-          supabase.from("predictions").select("*"),
-        ]);
-
-        const sm = Object.fromEntries(
-          ((settingsRows ?? []) as Array<{ key: string; value: unknown }>).map(r => [r.key, r.value])
-        );
-        const playersList = Array.isArray(sm["players"]) ? (sm["players"] as string[]) : [];
-        setPlayers([...playersList, ...Array(MAX_PLAYERS - playersList.length).fill("")]);
-        setNumPlayers(playersList.length);
-
-        const ld = sm["predictions_lock_date"] as string | undefined;
-        if (ld && ld !== "null") setLockDate(new Date(ld));
-
-        if (sm["results_locked"] === true) setResultsLocked(true);
-
-        if ((rRow as { data?: AllResults } | null)?.data) {
-          setResults((rRow as { data: AllResults }).data);
-        }
-
-        const predsObj: AllPredictions = {};
-        ((predRows ?? []) as Array<{ player_name: string; data: unknown }>).forEach(row => {
-          const idx = playersList.indexOf(row.player_name);
-          if (idx >= 0) predsObj[idx] = row.data as AllPredictions[number];
-        });
-        setPredictions(predsObj);
-      } catch(e) {
-        console.error("Supabase load error:", e);
-      }
+    loadAllData().then(data => {
+      setPlayers([...data.players, ...Array(MAX_PLAYERS - data.players.length).fill("")]);
+      setNumPlayers(data.players.length);
+      if (data.lockDate) setLockDate(data.lockDate);
+      if (data.resultsLocked) setResultsLocked(true);
+      setResults(data.results);
+      setPredictions(data.predictions);
       setLoaded(true);
-    }
-    load();
+    }).catch(e => {
+      console.error("Supabase load error:", e);
+      setLoaded(true);
+    });
   }, []);
 
+  // ── Poll results every 60s ─────────────────────────────────────────────────
   useEffect(() => {
     if (!loaded) return;
     const refresh = async () => {
-      try {
-        const { data } = await supabase.from("results").select("data").eq("id", 1).single();
-        if ((data as { data?: AllResults } | null)?.data) {
-          setResults((data as { data: AllResults }).data);
-        }
-      } catch(_e) {}
+      try { setResults(await loadResults()); } catch(_e) {}
     };
     const interval = setInterval(refresh, 60000);
     window.addEventListener("focus", refresh);
@@ -115,13 +140,14 @@ export default function App() {
 
   const activePlayers = players.slice(0, numPlayers);
 
+  // ── Prediction setters ─────────────────────────────────────────────────────
   function setPred(pi: number, matchId: string, side: string, val: MatchOutcome | null) {
     if (isLocked) return;
     setPredictions(prev => {
       const prevPlayer = prev[pi] ?? {};
       const prevMatch = prevPlayer[matchId] as MatchPrediction | undefined ?? {};
       const next: AllPredictions = { ...prev, [pi]: { ...prevPlayer, [matchId]: { ...prevMatch, [side]: val } } };
-      getSavePredFn(players[pi])(next[pi]);
+      if (side === "outcome") getMatchPredSaver(players[pi], matchId)(val);
       return next;
     });
   }
@@ -132,7 +158,7 @@ export default function App() {
       const prevPlayer = prev[pi] ?? {};
       const prevOrder = prevPlayer.tableOrder as Record<string, string[]> | undefined ?? {};
       const next: AllPredictions = { ...prev, [pi]: { ...prevPlayer, tableOrder: { ...prevOrder, [group]: order } } };
-      getSavePredFn(players[pi])(next[pi]);
+      getTablePredSaver(players[pi], group)(order);
       return next;
     });
   }
@@ -143,7 +169,7 @@ export default function App() {
       const prevPlayer = prev[pi] ?? {};
       const prevBonus = prevPlayer.bonus as Record<string, string> | undefined ?? {};
       const next: AllPredictions = { ...prev, [pi]: { ...prevPlayer, bonus: { ...prevBonus, [qid]: val } } };
-      getSavePredFn(players[pi])(next[pi]);
+      getBonusSaver(players[pi], qid)(val);
       return next;
     });
   }
@@ -152,7 +178,7 @@ export default function App() {
     if (isLocked) return;
     setPredictions(prev => {
       const next: AllPredictions = { ...prev, [pi]: { ...prev[pi], thirdPlaces: groups } };
-      getSavePredFn(players[pi])(next[pi]);
+      getThirdPlacesSaver(players[pi])(groups);
       return next;
     });
   }
@@ -163,24 +189,17 @@ export default function App() {
       const prevPlayer = prev[pi] ?? {};
       const prevKO = prevPlayer.knockoutWinners as Record<string, string | null> | undefined ?? {};
       const next: AllPredictions = { ...prev, [pi]: { ...prevPlayer, knockoutWinners: { ...prevKO, [matchId]: team } } };
-      getSavePredFn(players[pi])(next[pi]);
+      getKOPredSaver(players[pi], matchId)(team);
       return next;
     });
   }
 
+  // ── Result setters ─────────────────────────────────────────────────────────
   function setResult(matchId: string, side: string, val: string) {
     setResults(prev => {
       const prevMatch = prev[matchId] as { home?: string; away?: string } | undefined ?? {};
       const next: AllResults = { ...prev, [matchId]: { ...prevMatch, [side]: val } };
-      debounceSaveResults(next);
-      return next;
-    });
-  }
-
-  function setBonusResult(qid: string, val: string) {
-    setResults(prev => {
-      const next: AllResults = { ...prev, [`bonus_${qid}`]: val };
-      debounceSaveResults(next);
+      getMatchScoreSaver(matchId, side as "home" | "away")(val);
       return next;
     });
   }
@@ -189,7 +208,7 @@ export default function App() {
     setResults(prev => {
       const prevKO = prev.knockoutWinners ?? {};
       const next: AllResults = { ...prev, knockoutWinners: { ...prevKO, [matchId]: team } };
-      debounceSaveResults(next);
+      getKOWinnerSaver(matchId)(team);
       return next;
     });
   }
@@ -201,19 +220,25 @@ export default function App() {
       const prevType = prevGroup[type] ?? {};
       const next: AllResults = {
         ...prev,
-        tiebreakers: {
-          ...prevTB,
-          [group]: {
-            ...prevGroup,
-            [type]: { ...prevType, [team]: val },
-          },
-        },
+        tiebreakers: { ...prevTB, [group]: { ...prevGroup, [type]: { ...prevType, [team]: val } } },
       };
-      debounceSaveResults(next);
+      tiebreakerSaver(group, type, team, val);
       return next;
     });
   }
 
+  function setBonusIsCorrect(playerName: string, qid: string, isCorrect: boolean) {
+    const pi = players.indexOf(playerName);
+    if (pi < 0) return;
+    setPredictions(prev => {
+      const prevPlayer = prev[pi] ?? {};
+      const prevBC = prevPlayer.bonusCorrect as Record<string, boolean> | undefined ?? {};
+      return { ...prev, [pi]: { ...prevPlayer, bonusCorrect: { ...prevBC, [qid]: isCorrect } } };
+    });
+    saveBonusIsCorrect(playerName, qid, isCorrect).catch(console.error);
+  }
+
+  // ── Scoring ────────────────────────────────────────────────────────────────
   function calcScore(pi: number): number {
     let score = 0;
     GROUP_MATCHES.forEach(m => {
@@ -230,10 +255,8 @@ export default function App() {
       });
     });
     BONUS_QUESTIONS.forEach(bq => {
-      const pred   = (predictions[pi]?.bonus as Record<string, string> | undefined)?.[bq.id];
-      const actual = results[`bonus_${bq.id}`] as string | undefined;
-      if (pred && actual && pred.toLowerCase().trim() === actual.toLowerCase().trim())
-        score += bq.pts;
+      const isCorrect = (predictions[pi]?.bonusCorrect as Record<string, boolean> | undefined)?.[bq.id];
+      if (isCorrect === true) score += bq.pts;
     });
     const roundsById = Object.fromEntries(KNOCKOUT_ROUNDS_META.map(r => [r.id, r]));
     const r32 = roundsById["R32"], r16 = roundsById["R16"];
@@ -253,14 +276,14 @@ export default function App() {
 
     const koW    = (predictions[pi]?.knockoutWinners ?? {}) as Record<string, string | null>;
     const actKoW = (results.knockoutWinners ?? {}) as Record<string, string | null>;
-    const teams  = (ids: string[], src: Record<string, string | null>) =>
+    const koTeams  = (ids: string[], src: Record<string, string | null>) =>
       new Set(ids.map(id => src[id]).filter((t): t is string => !!t));
     const overlap = (a: Set<string>, b: Set<string>) => [...a].filter(t => b.has(t)).length;
 
-    score += overlap(teams(r32.matchIds, koW), teams(r32.matchIds, actKoW)) * r16.pts;
-    score += overlap(teams(r16.matchIds, koW), teams(r16.matchIds, actKoW)) * qf.pts;
-    score += overlap(teams(qf.matchIds,  koW), teams(qf.matchIds,  actKoW)) * sf.pts;
-    score += overlap(teams(sf.matchIds,  koW), teams(sf.matchIds,  actKoW)) * fin.pts;
+    score += overlap(koTeams(r32.matchIds, koW), koTeams(r32.matchIds, actKoW)) * r16.pts;
+    score += overlap(koTeams(r16.matchIds, koW), koTeams(r16.matchIds, actKoW)) * qf.pts;
+    score += overlap(koTeams(qf.matchIds,  koW), koTeams(qf.matchIds,  actKoW)) * sf.pts;
+    score += overlap(koTeams(sf.matchIds,  koW), koTeams(sf.matchIds,  actKoW)) * fin.pts;
     if (koW["M104"] && actKoW["M104"] && koW["M104"] === actKoW["M104"]) score += WinnerPoints;
 
     return score;
@@ -286,10 +309,8 @@ export default function App() {
       });
     });
     BONUS_QUESTIONS.forEach(bq => {
-      const pred   = (predictions[pi]?.bonus as Record<string, string> | undefined)?.[bq.id];
-      const actual = results[`bonus_${bq.id}`] as string | undefined;
-      if (pred && actual && pred.toLowerCase().trim() === actual.toLowerCase().trim())
-        bonus += bq.pts;
+      const isCorrect = (predictions[pi]?.bonusCorrect as Record<string, boolean> | undefined)?.[bq.id];
+      if (isCorrect === true) bonus += bq.pts;
     });
 
     const roundsById = Object.fromEntries(KNOCKOUT_ROUNDS_META.map(r => [r.id, r]));
@@ -310,14 +331,14 @@ export default function App() {
 
     const koW    = (predictions[pi]?.knockoutWinners ?? {}) as Record<string, string | null>;
     const actKoW = (results.knockoutWinners ?? {}) as Record<string, string | null>;
-    const teams  = (ids: string[], src: Record<string, string | null>) =>
+    const koTeams  = (ids: string[], src: Record<string, string | null>) =>
       new Set(ids.map(id => src[id]).filter((t): t is string => !!t));
     const overlap = (a: Set<string>, b: Set<string>) => [...a].filter(t => b.has(t)).length;
 
-    knockout["R16"]   = overlap(teams(r32.matchIds, koW), teams(r32.matchIds, actKoW)) * r16.pts;
-    knockout["QF"]    = overlap(teams(r16.matchIds, koW), teams(r16.matchIds, actKoW)) * qf.pts;
-    knockout["SF"]    = overlap(teams(qf.matchIds,  koW), teams(qf.matchIds,  actKoW)) * sf.pts;
-    knockout["Final"] = overlap(teams(sf.matchIds,  koW), teams(sf.matchIds,  actKoW)) * fin.pts;
+    knockout["R16"]   = overlap(koTeams(r32.matchIds, koW), koTeams(r32.matchIds, actKoW)) * r16.pts;
+    knockout["QF"]    = overlap(koTeams(r16.matchIds, koW), koTeams(r16.matchIds, actKoW)) * qf.pts;
+    knockout["SF"]    = overlap(koTeams(qf.matchIds,  koW), koTeams(qf.matchIds,  actKoW)) * sf.pts;
+    knockout["Final"] = overlap(koTeams(sf.matchIds,  koW), koTeams(sf.matchIds,  actKoW)) * fin.pts;
     if (koW["M104"] && actKoW["M104"] && koW["M104"] === actKoW["M104"]) knockout["Winner"] = WinnerPoints;
 
     return { outcomes, table, bonus, knockout };
@@ -344,7 +365,6 @@ export default function App() {
         .grp-btn{border:none;cursor:pointer;font-family:'Barlow Condensed',Arial;font-size:12px;font-weight:700;padding:5px 11px;border-radius:4px;transition:all 0.15s;letter-spacing:1px;}
         .bonus-input{width:100%;background:${THEME.bgInput};border:1.5px solid ${THEME.borderInput};color:${THEME.textPrimary};font-size:14px;padding:7px 10px;border-radius:6px;outline:none;font-family:'Barlow',Arial;}
         .bonus-input:focus{border-color:${THEME.gold};}
-        .bonus-input.actual{border-color:${THEME.blue};}
         .hscroll{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;}
         .hscroll::-webkit-scrollbar{height:3px;}
         .pick-btn{border:none;cursor:pointer;font-family:'Barlow Condensed',Arial;font-size:12px;font-weight:700;padding:6px 10px;border-radius:6px;transition:all 0.15s;text-align:left;width:100%;}
@@ -419,10 +439,12 @@ export default function App() {
             setGroupFilter={setGroupFilter}
             results={results}
             setResult={setResult}
-            setBonusResult={setBonusResult}
             setKnockoutWinnerResult={setKnockoutWinnerResult}
             setTiebreaker={setTiebreaker}
             isLocked={isResultsLocked}
+            activePlayers={activePlayers}
+            predictions={predictions}
+            setBonusIsCorrect={setBonusIsCorrect}
           />
         )}
 

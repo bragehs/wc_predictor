@@ -1,4 +1,4 @@
-import type { AllResults } from "../types/index";
+import type { AllResults, AllPredictions } from "../types/index";
 import { GROUPS, GROUP_MATCHES, flag } from "../data";
 import { BONUS_QUESTIONS } from "../config";
 import { THEME } from "../theme";
@@ -14,16 +14,18 @@ interface ResultsTabProps {
   setGroupFilter: (g: string) => void;
   results: AllResults;
   setResult: (matchId: string, side: string, val: string) => void;
-  setBonusResult: (qid: string, val: string) => void;
   setKnockoutWinnerResult: (matchId: string, team: string | null) => void;
   setTiebreaker: (group: string, type: string, team: string, val: number | undefined) => void;
   isLocked: boolean;
+  activePlayers: string[];
+  predictions: AllPredictions;
+  setBonusIsCorrect: (playerName: string, qid: string, isCorrect: boolean) => void;
 }
 
 export default function ResultsTab({
   groupFilter, setGroupFilter,
-  results, setResult, setBonusResult, setKnockoutWinnerResult, setTiebreaker,
-  isLocked,
+  results, setResult, setKnockoutWinnerResult, setTiebreaker,
+  isLocked, activePlayers, predictions, setBonusIsCorrect,
 }: ResultsTabProps) {
   const actualQ   = getQualifiers(results);
   const actualR32 = buildR32Bracket(actualQ);
@@ -93,18 +95,42 @@ export default function ResultsTab({
 
       {groupFilter === "BONUS" && (
         <div>
-          <div style={{ fontSize:10,color:THEME.textFaint,letterSpacing:1,textTransform:"uppercase",marginBottom:10 }}>Bonus — enter actual answers</div>
+          <div style={{ fontSize:10,color:THEME.textFaint,letterSpacing:1,textTransform:"uppercase",marginBottom:10 }}>Bonus — mark correct answers</div>
           {BONUS_QUESTIONS.map(bq => (
-            <div key={bq.id} style={{ marginBottom:12 }}>
-              <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:5 }}>
+            <div key={bq.id} style={{ marginBottom:20 }}>
+              <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:8 }}>
                 <span style={{ fontSize:13,fontWeight:600,color:THEME.textPrimary }}>{bq.label}</span>
                 <span style={{ fontSize:10,background:THEME.blueBg,color:THEME.blue,border:`1px solid ${THEME.blueBorder}`,borderRadius:4,padding:"1px 7px" }}>+{bq.pts} pts</span>
               </div>
-              <input className="bonus-input actual" placeholder="Actual answer…"
-                value={(results[`bonus_${bq.id}`] as string | undefined) ?? ""}
-                onChange={e => !isLocked && setBonusResult(bq.id, e.target.value)}
-                readOnly={isLocked}
-                style={{ opacity: isLocked ? 0.5 : 1 }}/>
+              {activePlayers.map((playerName, pi) => {
+                const answer = (predictions[pi]?.bonus as Record<string, string> | undefined)?.[bq.id];
+                const isCorrect = (predictions[pi]?.bonusCorrect as Record<string, boolean> | undefined)?.[bq.id] ?? false;
+                return (
+                  <div key={pi} style={{ display:"flex",alignItems:"center",gap:10,marginBottom:5,padding:"7px 10px",background:THEME.bgButton,borderRadius:6,border:`1px solid ${THEME.borderCard}` }}>
+                    <span style={{ fontSize:12,fontWeight:700,color:THEME.textSecondary,minWidth:72,flexShrink:0 }}>{playerName}</span>
+                    <span style={{ fontSize:12,flex:1,color:answer ? THEME.textPrimary : THEME.textFaint,fontStyle:answer ? "normal" : "italic" }}>
+                      {answer ?? "no answer"}
+                    </span>
+                    <button
+                      onClick={() => !isLocked && setBonusIsCorrect(playerName, bq.id, !isCorrect)}
+                      style={{
+                        background: isCorrect ? THEME.green : THEME.bgInput,
+                        border: `1.5px solid ${isCorrect ? THEME.green : THEME.borderInput}`,
+                        color: isCorrect ? "#000" : THEME.textMuted,
+                        borderRadius: 5,
+                        padding: "4px 12px",
+                        cursor: isLocked ? "default" : "pointer",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        fontFamily: "'Barlow Condensed', Arial",
+                        opacity: isLocked ? 0.5 : 1,
+                        flexShrink: 0,
+                      }}>
+                      {isCorrect ? "Correct" : "Mark correct"}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           ))}
         </div>

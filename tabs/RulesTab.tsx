@@ -1,4 +1,4 @@
-import { SCORING, BONUS_QUESTIONS } from "../config";
+import { SCORING, BONUS_QUESTIONS, WinnerPoints } from "../config";
 import { KNOCKOUT_ROUNDS_META } from "../bracketLogic";
 import { THEME } from "../theme";
 import STitle from "../components/STitle";
@@ -15,6 +15,7 @@ export default function RulesTab() {
           {KNOCKOUT_ROUNDS_META.map(r => (
             <div key={r.id}><b style={{color:THEME.textPrimary}}>+{r.pts} pts</b> — {r.label}</div>
           ))}
+          <div><b style={{color:THEME.textPrimary}}>+{WinnerPoints} pts</b> — {"Winner"}</div>
         </div>
         <div style={{ marginTop:6,paddingTop:6,borderTop:`1px solid ${THEME.borderMuted}` }}>
           {BONUS_QUESTIONS.map(bq => (

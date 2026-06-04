@@ -92,6 +92,7 @@ export interface MatchPrediction {
 export interface PlayerPredictions {
   tableOrder?: Record<string, string[]>;
   bonus?: Record<string, string>;
+  bonusCorrect?: Record<string, boolean>;
   thirdPlaces?: string[];
   knockoutWinners?: Record<string, string | null>;
   [matchId: string]: unknown;
@@ -116,6 +117,7 @@ export interface TiebreakerData {
 export interface AllResults {
   knockoutWinners?: Record<string, string | null>;
   tiebreakers?: Record<string, TiebreakerData>;
+  bonusAnswers?: Record<string, string>;
   [key: string]: unknown;
 }
 

@@ -144,10 +144,9 @@ export default function PredictionsTab({
       {groupFilter === "BONUS" && (
         <div>
           {BONUS_QUESTIONS.map(bq => {
-            const bonusPreds = (predictions[pi]?.bonus as Record<string, string> | undefined);
-            const playerBonus = bonusPreds?.[bq.id] ?? "";
-            const actual = results[`bonus_${bq.id}`] as string | undefined;
-            const correct = actual && playerBonus && playerBonus.toLowerCase().trim() === actual.toLowerCase().trim();
+            const playerBonus = (predictions[pi]?.bonus as Record<string, string> | undefined)?.[bq.id] ?? "";
+            const isCorrect   = (predictions[pi]?.bonusCorrect as Record<string, boolean> | undefined)?.[bq.id] ?? false;
+            const actual      = (results.bonusAnswers as Record<string, string> | undefined)?.[bq.id];
             return (
               <div key={bq.id} style={{ marginBottom:16 }}>
                 <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:6 }}>
@@ -160,7 +159,7 @@ export default function PredictionsTab({
                     readOnly={!isEditable}
                     style={{ opacity: isEditable ? 1 : 0.6 }}
                   />
-                  {actual && <PointsBadge pts={correct ? bq.pts : 0}/>}
+                  {actual && <PointsBadge pts={isCorrect ? bq.pts : 0}/>}
                 </div>
                 {actual && <div style={{ fontSize:11,color:THEME.blue,marginTop:3 }}>Actual: {actual}</div>}
               </div>
