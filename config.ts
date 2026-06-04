@@ -1,13 +1,9 @@
-import type { ScoringConfig, BonusQuestion, TabName } from "./types/index";
+import type { ScoringConfig, TabName } from "./types/index";
 
 export const SCORING: ScoringConfig = {
   correctOutcome: 1,
   tablePosition: 2,
 };
-
-export const BONUS_QUESTIONS: BonusQuestion[] = [
-  { id: "top_scorer", label: "Top Scorer (Toppscorer)",     pts: 10 },
-];
 
 export const MAX_PLAYERS = 15;
 
@@ -28,14 +24,6 @@ export const COLORS: string[] = [
   "#c084fc",
   "#fb7185",
 ];
-
-export const KNOCKOUT_SCORING: Record<string, number> = {
-  R32:   2,
-  R16:   2,
-  QF:    5,
-  SF:    10,
-  Final: 20
-};
 
 export const WinnerPoints = 30;
 

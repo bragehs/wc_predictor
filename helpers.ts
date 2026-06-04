@@ -7,7 +7,7 @@ import type {
   GroupQualifier,
 } from "./types/index";
 import { SCORING } from "./config";
-import { GROUPS, GROUP_MATCHES } from "./data";
+import { GROUPS, GROUP_MATCHES } from "./tournamentStore";
 import {
   calcGroupStandingsFromOutcomes,
   buildR32Bracket,

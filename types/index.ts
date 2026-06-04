@@ -1,8 +1,8 @@
 // ── Domain primitives ─────────────────────────────────────────────────────────
 
 export type MatchOutcome = "H" | "D" | "A";
-export type GroupLetter = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J" | "K" | "L";
-export type TabName = "Rules" | "Predictions" | "Results" | "Bracket" | "Standings";
+export type GroupLetter = string;
+export type TabName = "Rules" | "Predictions" | "Results" | "Bracket" | "Standings" | "Setup";
 export type BracketView = "actual" | number;
 
 // ── Static data shapes ────────────────────────────────────────────────────────

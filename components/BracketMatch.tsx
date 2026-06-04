@@ -1,6 +1,5 @@
-import { flag } from "../data";
 import { THEME } from "../theme";
-
+import { useFlag } from "../context/TournamentContext";
 interface BracketMatchProps {
   t1: string;
   t2: string;
@@ -9,6 +8,7 @@ interface BracketMatchProps {
 }
 
 export default function BracketMatch({ t1, t2, label, winner }: BracketMatchProps) {
+  const flag = useFlag();
   const isTBD = (t: string) => !t || t.startsWith("W(") || t.endsWith("TBD") || (t.includes("1") && t.length <= 3);
   const col1 = winner ? (winner === t1 ? THEME.green : THEME.textMuted) : (isTBD(t1) ? THEME.textMuted : THEME.textPrimary);
   const col2 = winner ? (winner === t2 ? THEME.green : THEME.textMuted) : (isTBD(t2) ? THEME.textMuted : THEME.textPrimary);

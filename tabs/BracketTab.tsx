@@ -3,9 +3,9 @@ import { COLORS } from "../config";
 import { THEME } from "../theme";
 import {
   getQualifiers, buildR32Bracket, getKnockoutMatchup,
-  getBestThirdPlaces, KNOCKOUT_ROUNDS_META,
+  getBestThirdPlaces,
 } from "../bracketLogic";
-import { flag } from "../data";
+import { useTournament, useFlag } from "../context/TournamentContext";
 import { buildPredQualifiers } from "../helpers";
 import STitle from "../components/STitle";
 import BracketMatch from "../components/BracketMatch";
@@ -21,6 +21,8 @@ interface BracketTabProps {
 export default function BracketTab({
   activePlayers, predictions, results, bracketView, setBracketView,
 }: BracketTabProps) {
+  const { knockoutRounds } = useTournament();
+  const flag = useFlag();
   const isActual   = bracketView === "actual";
   const koWinners  = isActual
     ? (results.knockoutWinners ?? {}) as Record<string, string | null>
@@ -63,7 +65,7 @@ export default function BracketTab({
         </div>
       )}
 
-      {KNOCKOUT_ROUNDS_META.map(round => (
+      {knockoutRounds.map(round => (
         <div key={round.id} style={{ marginBottom:16 }}>
           <div style={{ fontSize:12,color:THEME.textMuted,letterSpacing:1,textTransform:"uppercase",marginBottom:6 }}>{round.label}</div>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:5 }}>

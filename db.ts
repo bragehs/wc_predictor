@@ -1,7 +1,16 @@
 import { supabase } from "./supabase";
-import type { AllPredictions, AllResults } from "./types/index";
+import type { AllPredictions, AllResults, BonusQuestion, GroupMatch, KnockoutRoundMeta } from "./types/index";
+import { ROUND_MATCH_IDS } from "./tournaments/wc_2026/bracket";
 
 const TOURNAMENT_ID = "wc_2026";
+
+export interface TournamentConfigData {
+  groups: Record<string, string[]>;
+  groupMatches: GroupMatch[];
+  flags: Record<string, string>;
+  bonusQuestions: BonusQuestion[];
+  knockoutRounds: KnockoutRoundMeta[];
+}
 
 export interface AppData {
   players: string[];
@@ -9,12 +18,16 @@ export interface AppData {
   results: AllResults;
   lockDate: Date | null;
   resultsLocked: boolean;
+  tournamentConfig: TournamentConfigData;
 }
 
 export async function loadAllData(): Promise<AppData> {
   const [
     { data: playerRows },
     { data: settingsRows },
+    { data: teamRows },
+    { data: bonusQRows },
+    { data: koRoundRows },
     { data: matchPredRows },
     { data: tablePredRows },
     { data: bonusAnswerRows },
@@ -22,18 +35,19 @@ export async function loadAllData(): Promise<AppData> {
     { data: thirdPlaceRows },
     { data: matchRows },
     { data: tiebreakerRows },
-    { data: bonusQRows },
   ] = await Promise.all([
     supabase.from("players").select("name"),
     supabase.from("settings").select("key, value").eq("tournament_id", TOURNAMENT_ID),
+    supabase.from("teams").select("name, flag, group_id, sort_order").eq("tournament_id", TOURNAMENT_ID).order("sort_order"),
+    supabase.from("bonus_questions").select("question_id, label, pts, correct_answer").eq("tournament_id", TOURNAMENT_ID),
+    supabase.from("knockout_rounds").select("id, label, pts, sort_order").eq("tournament_id", TOURNAMENT_ID).order("sort_order"),
     supabase.from("match_predictions").select("player_name, match_id, outcome").eq("tournament_id", TOURNAMENT_ID),
     supabase.from("table_predictions").select("player_name, group_id, position, team").eq("tournament_id", TOURNAMENT_ID).order("position"),
     supabase.from("bonus_answers").select("player_name, question_id, answer, is_correct").eq("tournament_id", TOURNAMENT_ID),
     supabase.from("knockout_predictions").select("player_name, match_id, predicted_winner").eq("tournament_id", TOURNAMENT_ID),
     supabase.from("third_place_picks").select("player_name, group_id").eq("tournament_id", TOURNAMENT_ID),
-    supabase.from("matches").select("id, round, score_home, score_away, ko_winner").eq("tournament_id", TOURNAMENT_ID),
+    supabase.from("matches").select("id, round, score_home, score_away, ko_winner, home, away, date, group_id").eq("tournament_id", TOURNAMENT_ID),
     supabase.from("tiebreakers").select("group_id, type, team, value").eq("tournament_id", TOURNAMENT_ID),
-    supabase.from("bonus_questions").select("question_id, correct_answer").eq("tournament_id", TOURNAMENT_ID),
   ]);
 
   const playersList = ((playerRows ?? []) as Array<{ name: string }>).map(r => r.name);
@@ -45,6 +59,40 @@ export async function loadAllData(): Promise<AppData> {
   const lockDate = ld && ld !== "null" ? new Date(ld) : null;
   const resultsLocked = sm["results_locked"] === true;
 
+  // ── Build tournament config from DB rows ──────────────────────────────────
+  const flags: Record<string, string> = {};
+  const groupsMap: Record<string, string[]> = {};
+    ((teamRows ?? []) as Array<{ name: string; flag: string; group_id: string; sort_order: number }>)
+    .slice()
+    .sort((a, b) => a.group_id.localeCompare(b.group_id) || a.sort_order - b.sort_order)
+    .forEach(r => {
+      flags[r.name] = r.flag;
+      if (!groupsMap[r.group_id]) groupsMap[r.group_id] = [];
+      groupsMap[r.group_id].push(r.name);
+  });
+
+  const groupMatchesList: GroupMatch[] = ((matchRows ?? []) as Array<{
+    id: string; round: string; home: string; away: string; date: string | null; group_id: string | null;
+  }>)
+    .filter(m => m.round === "group")
+    .map(m => ({ id: m.id, group: m.group_id ?? "", home: m.home, away: m.away, date: m.date ?? "" }));
+
+  const bonusQuestions: BonusQuestion[] = ((bonusQRows ?? []) as Array<{
+    question_id: string; label: string; pts: number;
+  }>).map(r => ({ id: r.question_id, label: r.label, pts: r.pts }));
+
+  const knockoutRounds: KnockoutRoundMeta[] = ((koRoundRows ?? []) as Array<{
+    id: string; label: string; pts: number; sort_order: number;
+  }>).map(r => ({
+    id: r.id,
+    label: r.label,
+    pts: r.pts,
+    matchIds: ROUND_MATCH_IDS[r.id] ?? [],
+  }));
+
+  const tournamentConfig: TournamentConfigData = { groups: groupsMap, groupMatches: groupMatchesList, flags, bonusQuestions, knockoutRounds };
+
+  // ── Build predictions ─────────────────────────────────────────────────────
   const predsObj: AllPredictions = {};
   playersList.forEach((playerName, idx) => {
     const matchPreds: Record<string, { outcome: string }> = {};
@@ -83,7 +131,7 @@ export async function loadAllData(): Promise<AppData> {
 
   const results = buildResults(matchRows, tiebreakerRows, bonusQRows);
 
-  return { players: playersList, predictions: predsObj, results, lockDate, resultsLocked };
+  return { players: playersList, predictions: predsObj, results, lockDate, resultsLocked, tournamentConfig };
 }
 
 export async function loadResults(): Promise<AllResults> {
@@ -201,4 +249,42 @@ export async function saveTiebreaker(groupId: string, type: string, team: string
 
 export async function saveBonusIsCorrect(playerName: string, questionId: string, isCorrect: boolean): Promise<void> {
   await supabase.from("bonus_answers").upsert({ tournament_id: TOURNAMENT_ID, player_name: playerName, question_id: questionId, is_correct: isCorrect });
+}
+
+// ── Setup saves ───────────────────────────────────────────────────────────────
+
+export async function saveTeam(name: string, flag: string, groupId: string, sortOrder: number): Promise<void> {
+  await supabase.from("teams").upsert({ tournament_id: TOURNAMENT_ID, name, flag, group_id: groupId, sort_order: sortOrder });
+}
+
+export async function deleteTeam(name: string): Promise<void> {
+  await supabase.from("teams").delete().eq("tournament_id", TOURNAMENT_ID).eq("name", name);
+}
+
+export async function saveMatchFixture(id: string, home: string, away: string, groupId: string, date: string): Promise<void> {
+  await supabase.from("matches").upsert({ tournament_id: TOURNAMENT_ID, id, home, away, group_id: groupId, round: "group", date });
+}
+
+export async function deleteMatchFixture(id: string): Promise<void> {
+  await supabase.from("matches").delete().eq("tournament_id", TOURNAMENT_ID).eq("id", id);
+}
+
+export async function saveBonusQuestion(questionId: string, label: string, pts: number): Promise<void> {
+  await supabase.from("bonus_questions").upsert({ tournament_id: TOURNAMENT_ID, question_id: questionId, label, pts });
+}
+
+export async function deleteBonusQuestion(questionId: string): Promise<void> {
+  await supabase.from("bonus_questions").delete().eq("tournament_id", TOURNAMENT_ID).eq("question_id", questionId);
+}
+
+export async function savePlayer(name: string): Promise<void> {
+  await supabase.from("players").insert({ name });
+}
+
+export async function deletePlayer(name: string): Promise<void> {
+  await supabase.from("players").delete().eq("name", name);
+}
+
+export async function saveSetting(key: string, value: unknown): Promise<void> {
+  await supabase.from("settings").upsert({ tournament_id: TOURNAMENT_ID, key, value });
 }

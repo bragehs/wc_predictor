@@ -1,6 +1,6 @@
 import type { AllPredictions, AllResults, MatchOutcome, MatchPrediction } from "../types/index";
-import { GROUPS, GROUP_MATCHES, flag } from "../data";
-import { BONUS_QUESTIONS, COLORS } from "../config";
+import { COLORS } from "../config";
+import { useTournament, useFlag } from "../context/TournamentContext";
 import { THEME } from "../theme";
 import { pointsForOutcome } from "../helpers";
 import STitle from "../components/STitle";
@@ -33,6 +33,8 @@ export default function PredictionsTab({
   setPred, setTableOrder, setBonusPred, setThirdPlacesPred, setKnockoutWinnerPred,
   isAdmin, isLocked, lockDate,
 }: PredictionsTabProps) {
+  const { groups, groupMatches, bonusQuestions } = useTournament();
+  const flag = useFlag();
   const pi = selectedPlayer;
   const isEditable = isAdmin || !isLocked;
 
@@ -62,7 +64,7 @@ export default function PredictionsTab({
       </div>
 
       <div style={{ display:"flex",gap:5,flexWrap:"wrap",marginBottom:12 }}>
-        {Object.keys(GROUPS).map(g => (
+        {Object.keys(groups).map(g => (
           <button key={g} className="grp-btn" onClick={() => setGroupFilter(g)}
             style={{ background:groupFilter===g?THEME.gold:THEME.bgButton,color:groupFilter===g?"#000":THEME.textSecondary,border:`1px solid ${groupFilter===g?THEME.gold:THEME.borderCard}` }}>
             {g}
@@ -78,11 +80,11 @@ export default function PredictionsTab({
         </button>
       </div>
 
-      {GROUPS[groupFilter] !== undefined && (() => {
+      {groups[groupFilter] !== undefined && (() => {
         const pred = predictions[pi] ?? {};
         const tableOrder = pred.tableOrder as Record<string, string[]> | undefined;
         const outcomes: Record<string, string | null> = Object.fromEntries(
-          GROUP_MATCHES.filter(m => m.group === groupFilter).map(m => {
+          groupMatches.filter(m => m.group === groupFilter).map(m => {
             const mp = pred[m.id] as MatchPrediction | undefined;
             return [m.id, mp?.outcome ?? null];
           })
@@ -92,7 +94,7 @@ export default function PredictionsTab({
             <div style={{ fontSize:10,color:THEME.textFaint,letterSpacing:1,textTransform:"uppercase",marginBottom:8 }}>
               Group {groupFilter} — {activePlayers[pi] || `Player ${pi + 1}`}'s predictions
             </div>
-            {GROUP_MATCHES.filter(m => m.group === groupFilter).map(m => {
+            {groupMatches.filter(m => m.group === groupFilter).map(m => {
               const mp = pred[m.id] as MatchPrediction | undefined ?? {};
               const actual = results[m.id];
               const outcome = mp.outcome;
@@ -130,7 +132,7 @@ export default function PredictionsTab({
               </div>
               <GroupTableEditable
                 group={groupFilter}
-                teams={GROUPS[groupFilter]}
+                teams={groups[groupFilter]}
                 outcomes={outcomes}
                 storedOrder={tableOrder?.[groupFilter]}
                 onOrderChange={order => isEditable && setTableOrder(pi, groupFilter, order)}
@@ -143,7 +145,7 @@ export default function PredictionsTab({
 
       {groupFilter === "BONUS" && (
         <div>
-          {BONUS_QUESTIONS.map(bq => {
+          {bonusQuestions.map(bq => {
             const playerBonus = (predictions[pi]?.bonus as Record<string, string> | undefined)?.[bq.id] ?? "";
             const isCorrect   = (predictions[pi]?.bonusCorrect as Record<string, boolean> | undefined)?.[bq.id] ?? false;
             const actual      = (results.bonusAnswers as Record<string, string> | undefined)?.[bq.id];

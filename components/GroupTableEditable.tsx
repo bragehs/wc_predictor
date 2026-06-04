@@ -1,4 +1,4 @@
-import { flag } from "../data";
+import { useFlag } from "../context/TournamentContext";
 import { calcGroupStandingsFromOutcomes } from "../bracketLogic";
 import { applyManualOrder } from "../helpers";
 import { THEME } from "../theme";
@@ -15,6 +15,7 @@ interface GroupTableEditableProps {
 export default function GroupTableEditable({
   group, teams, outcomes, storedOrder, onOrderChange, isEditable,
 }: GroupTableEditableProps) {
+  const flag = useFlag();
   const standings = calcGroupStandingsFromOutcomes(group, teams, outcomes);
   const effective = applyManualOrder(standings, storedOrder);
 

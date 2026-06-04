@@ -1,9 +1,8 @@
 import type { AllResults, AllPredictions } from "../types/index";
-import { GROUPS, GROUP_MATCHES, flag } from "../data";
-import { BONUS_QUESTIONS } from "../config";
+import { useTournament, useFlag } from "../context/TournamentContext";
 import { THEME } from "../theme";
 import {
-  getQualifiers, buildR32Bracket, getKnockoutMatchup, KNOCKOUT_ROUNDS_META,
+  getQualifiers, buildR32Bracket, getKnockoutMatchup,
 } from "../bracketLogic";
 import STitle from "../components/STitle";
 import GroupTable from "../components/GroupTable";
@@ -27,6 +26,8 @@ export default function ResultsTab({
   results, setResult, setKnockoutWinnerResult, setTiebreaker,
   isLocked, activePlayers, predictions, setBonusIsCorrect,
 }: ResultsTabProps) {
+  const { groups, groupMatches, bonusQuestions, knockoutRounds } = useTournament();
+  const flag = useFlag();
   const actualQ   = getQualifiers(results);
   const actualR32 = buildR32Bracket(actualQ);
   const koWinners = (results.knockoutWinners ?? {}) as Record<string, string | null>;
@@ -42,7 +43,7 @@ export default function ResultsTab({
       {!isLocked && <div style={{ fontSize:12,color:THEME.textMuted,marginBottom:12 }}>Enter actual scores and knockout results as the tournament progresses.</div>}
 
       <div style={{ display:"flex",gap:5,flexWrap:"wrap",marginBottom:12 }}>
-        {Object.keys(GROUPS).map(g => (
+        {Object.keys(groups).map(g => (
           <button key={g} className="grp-btn" onClick={() => setGroupFilter(g)}
             style={{ background:groupFilter===g?THEME.blue:THEME.bgButton,color:groupFilter===g?"#fff":THEME.textSecondary,border:`1px solid ${groupFilter===g?THEME.blue:THEME.borderCard}` }}>
             {g}
@@ -60,7 +61,7 @@ export default function ResultsTab({
 
       {!["BONUS", "KNOCKOUT", "BRACKET"].includes(groupFilter) && (
         <>
-          {GROUP_MATCHES.filter(m => m.group === groupFilter).map(m => {
+          {groupMatches.filter(m => m.group === groupFilter).map(m => {
             const actual = results[m.id] as { home?: string; away?: string } | undefined ?? {};
             return (
               <div key={m.id} className="match-row">
@@ -87,7 +88,7 @@ export default function ResultsTab({
           })}
           <div style={{ marginTop:12 }}>
             <div style={{ fontSize:10,color:THEME.textFaint,letterSpacing:1,textTransform:"uppercase",marginBottom:6 }}>Group {groupFilter} Standings</div>
-            <GroupTable group={groupFilter} teams={GROUPS[groupFilter]} results={results} highlight/>
+            <GroupTable group={groupFilter} teams={groups[groupFilter]} results={results} highlight/>
           </div>
           <TiebreakerSection group={groupFilter} results={results} setTiebreaker={setTiebreaker} isLocked={isLocked}/>
         </>
@@ -96,7 +97,7 @@ export default function ResultsTab({
       {groupFilter === "BONUS" && (
         <div>
           <div style={{ fontSize:10,color:THEME.textFaint,letterSpacing:1,textTransform:"uppercase",marginBottom:10 }}>Bonus — mark correct answers</div>
-          {BONUS_QUESTIONS.map(bq => (
+          {bonusQuestions.map(bq => (
             <div key={bq.id} style={{ marginBottom:20 }}>
               <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:8 }}>
                 <span style={{ fontSize:13,fontWeight:600,color:THEME.textPrimary }}>{bq.label}</span>
@@ -138,7 +139,7 @@ export default function ResultsTab({
 
       {groupFilter === "KNOCKOUT" && (
         <div>
-          {KNOCKOUT_ROUNDS_META.map(round => (
+          {knockoutRounds.map(round => (
             <div key={round.id} style={{ marginBottom:20 }}>
               <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:8 }}>
                 <div style={{ fontSize:13,fontWeight:700,color:THEME.blue,letterSpacing:1,textTransform:"uppercase" }}>{round.label}</div>

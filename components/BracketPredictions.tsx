@@ -1,7 +1,7 @@
 import type { AllPredictions, AllResults } from "../types/index";
-import { GROUPS, flag } from "../data";
+import { useTournament, useFlag } from "../context/TournamentContext";
 import { THEME } from "../theme";
-import { buildR32Bracket, getKnockoutMatchup, KNOCKOUT_ROUNDS_META } from "../bracketLogic";
+import { buildR32Bracket, getKnockoutMatchup } from "../bracketLogic";
 import { buildPredQualifiers } from "../helpers";
 
 interface BracketPredictionsProps {
@@ -16,13 +16,15 @@ interface BracketPredictionsProps {
 export default function BracketPredictions({
   pi, predictions, results, setThirdPlacesPred, setKnockoutWinnerPred, isEditable,
 }: BracketPredictionsProps) {
+  const { groups, knockoutRounds } = useTournament();
+  const flag = useFlag();
   const pred       = predictions[pi] ?? {};
   const thirdPicks = (pred.thirdPlaces as string[] | undefined) ?? [];
   const koWinners  = (pred.knockoutWinners as Record<string, string | null> | undefined) ?? {};
   const actKoW     = results.knockoutWinners ?? {};
 
   const predQ = buildPredQualifiers(pi, predictions);
-  const thirds = Object.entries(GROUPS).map(([g]) => ({
+  const thirds = Object.entries(groups).map(([g]) => ({
     group: g, team: predQ[g]?.third ?? `3rd ${g}`,
   }));
   const r32 = buildR32Bracket(predQ, thirdPicks.length === 8 ? thirdPicks : null);
@@ -72,7 +74,7 @@ export default function BracketPredictions({
         )}
       </div>
 
-      {KNOCKOUT_ROUNDS_META.map(round => (
+      {knockoutRounds.map(round => (
         <div key={round.id} style={{ marginBottom:20 }}>
           <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:8 }}>
             <div style={{ fontSize:13,fontWeight:700,color:THEME.gold,letterSpacing:1,textTransform:"uppercase" }}>{round.label}</div>

@@ -1,9 +1,8 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import type { MatchPrediction, TabName, AllPredictions, AllResults, MatchOutcome, BracketView, ScoreBreakdown } from "./types/index.ts";
-import { SCORING, BONUS_QUESTIONS, MAX_PLAYERS, COLORS, TABS, WinnerPoints } from "./config.ts";
+import { SCORING, MAX_PLAYERS, COLORS, TABS, WinnerPoints } from "./config.ts";
 import { THEME } from "./theme.ts";
-import { GROUPS, GROUP_MATCHES } from "./data.js";
-import { calcGroupStandings, getQualifiers, buildR32Bracket, KNOCKOUT_ROUNDS_META } from "./bracketLogic.ts";
+import { calcGroupStandings, getQualifiers, buildR32Bracket } from "./bracketLogic.ts";
 import {
   groupIsComplete, playerGroupIsComplete, pointsForOutcome,
   getPredEffectiveOrder, buildPredR32,
@@ -14,11 +13,15 @@ import {
   saveThirdPlacePicks, saveKnockoutPrediction,
   saveMatchScore, saveKnockoutWinner, saveTiebreaker, saveBonusIsCorrect,
 } from "./db.ts";
+import { initTournamentStore } from "./tournamentStore.ts";
+import { TournamentProvider } from "./context/TournamentContext.tsx";
+import type { TournamentConfig } from "./context/TournamentContext.tsx";
 import RulesTab       from "./tabs/RulesTab.tsx";
 import PredictionsTab from "./tabs/PredictionsTab.tsx";
 import ResultsTab     from "./tabs/ResultsTab.tsx";
 import BracketTab     from "./tabs/BracketTab.tsx";
 import StandingsTab   from "./tabs/StandingsTab.tsx";
+import SetupTab       from "./tabs/SetupTab.tsx";
 
 function debounce<T extends unknown[]>(fn: (...args: T) => void, ms: number) {
   let t: ReturnType<typeof setTimeout>;
@@ -37,6 +40,9 @@ export default function App() {
   const [loaded, setLoaded]             = useState(false);
   const [lockDate, setLockDate]         = useState<Date | null>(null);
   const [resultsLocked, setResultsLocked] = useState(false);
+  const [tournamentConfig, setTournamentConfig] = useState<TournamentConfig>({
+    groups: {}, groupMatches: [], flags: {}, bonusQuestions: [], knockoutRounds: [],
+  });
 
   const isAdmin = useMemo(() => new URLSearchParams(window.location.search).get("admin") === "1", []);
   const isLocked = !!(lockDate && new Date() > lockDate && !isAdmin);
@@ -112,14 +118,21 @@ export default function App() {
   }
 
   // ── Load ───────────────────────────────────────────────────────────────────
+  function applyData(data: Awaited<ReturnType<typeof loadAllData>>) {
+    const cfg = data.tournamentConfig;
+    initTournamentStore(cfg.groups, cfg.groupMatches, cfg.flags);
+    setTournamentConfig(cfg);
+    setPlayers([...data.players, ...Array(MAX_PLAYERS - data.players.length).fill("")]);
+    setNumPlayers(data.players.length);
+    setLockDate(data.lockDate);
+    setResultsLocked(data.resultsLocked);
+    setResults(data.results);
+    setPredictions(data.predictions);
+  }
+
   useEffect(() => {
     loadAllData().then(data => {
-      setPlayers([...data.players, ...Array(MAX_PLAYERS - data.players.length).fill("")]);
-      setNumPlayers(data.players.length);
-      if (data.lockDate) setLockDate(data.lockDate);
-      if (data.resultsLocked) setResultsLocked(true);
-      setResults(data.results);
-      setPredictions(data.predictions);
+      applyData(data);
       setLoaded(true);
     }).catch(e => {
       console.error("Supabase load error:", e);
@@ -240,12 +253,13 @@ export default function App() {
 
   // ── Scoring ────────────────────────────────────────────────────────────────
   function calcScore(pi: number): number {
+    const { groups, groupMatches, bonusQuestions, knockoutRounds } = tournamentConfig;
     let score = 0;
-    GROUP_MATCHES.forEach(m => {
+    groupMatches.forEach(m => {
       const pred = predictions[pi]?.[m.id] as MatchPrediction | undefined;
       score += pointsForOutcome(pred, results[m.id]);
     });
-    Object.entries(GROUPS).forEach(([g, teams]) => {
+    Object.entries(groups).forEach(([g, teams]) => {
       if (!groupIsComplete(g, results)) return;
       if (!playerGroupIsComplete(pi, g, predictions)) return;
       const predOrder = getPredEffectiveOrder(pi, g, predictions).map(r => r.team);
@@ -254,17 +268,19 @@ export default function App() {
         if (actualS[idx]?.team === team) score += SCORING.tablePosition;
       });
     });
-    BONUS_QUESTIONS.forEach(bq => {
+    bonusQuestions.forEach(bq => {
       const isCorrect = (predictions[pi]?.bonusCorrect as Record<string, boolean> | undefined)?.[bq.id];
       if (isCorrect === true) score += bq.pts;
     });
-    const roundsById = Object.fromEntries(KNOCKOUT_ROUNDS_META.map(r => [r.id, r]));
+    const roundsById = Object.fromEntries(knockoutRounds.map(r => [r.id, r]));
     const r32 = roundsById["R32"], r16 = roundsById["R16"];
     const qf  = roundsById["QF"],  sf  = roundsById["SF"], fin = roundsById["Final"];
+    if (!r32 || !r16 || !qf || !sf || !fin) return score;
 
-    const allGroupsPredicted = Object.keys(GROUPS).every(g => playerGroupIsComplete(pi, g, predictions));
+    const allGroupsPredicted = Object.keys(groups).every(g => playerGroupIsComplete(pi, g, predictions));
+    const allGroupsComplete  = Object.keys(groups).every(g => groupIsComplete(g, results));
     const predThirdPlaces = predictions[pi]?.thirdPlaces as string[] | undefined;
-    if (allGroupsPredicted && predThirdPlaces?.length === 8) {
+    if (allGroupsPredicted && allGroupsComplete && predThirdPlaces?.length === 8) {
       const actualR32Teams = new Set(
         buildR32Bracket(getQualifiers(results)).flatMap(m => [m.home, m.away]).filter(t => t !== "3rd TBD")
       );
@@ -290,16 +306,17 @@ export default function App() {
   }
 
   function calcScoreBreakdown(pi: number): ScoreBreakdown {
+    const { groups, groupMatches, bonusQuestions, knockoutRounds } = tournamentConfig;
     let outcomes = 0, table = 0, bonus = 0;
     const knockout: Record<string, number> = {};
-    KNOCKOUT_ROUNDS_META.forEach(r => { knockout[r.id] = 0; });
+    knockoutRounds.forEach(r => { knockout[r.id] = 0; });
     knockout["Winner"] = 0;
 
-    GROUP_MATCHES.forEach(m => {
+    groupMatches.forEach(m => {
       const pred = predictions[pi]?.[m.id] as MatchPrediction | undefined;
       outcomes += pointsForOutcome(pred, results[m.id]);
     });
-    Object.entries(GROUPS).forEach(([g, teams]) => {
+    Object.entries(groups).forEach(([g, teams]) => {
       if (!groupIsComplete(g, results)) return;
       if (!playerGroupIsComplete(pi, g, predictions)) return;
       const predOrder = getPredEffectiveOrder(pi, g, predictions).map(r => r.team);
@@ -308,38 +325,41 @@ export default function App() {
         if (actualS[idx]?.team === team) table += SCORING.tablePosition;
       });
     });
-    BONUS_QUESTIONS.forEach(bq => {
+    bonusQuestions.forEach(bq => {
       const isCorrect = (predictions[pi]?.bonusCorrect as Record<string, boolean> | undefined)?.[bq.id];
       if (isCorrect === true) bonus += bq.pts;
     });
 
-    const roundsById = Object.fromEntries(KNOCKOUT_ROUNDS_META.map(r => [r.id, r]));
+    const roundsById = Object.fromEntries(knockoutRounds.map(r => [r.id, r]));
     const r32 = roundsById["R32"], r16 = roundsById["R16"];
     const qf  = roundsById["QF"],  sf  = roundsById["SF"], fin = roundsById["Final"];
 
-    const allGroupsPredicted = Object.keys(GROUPS).every(g => playerGroupIsComplete(pi, g, predictions));
-    const predThirdPlaces = predictions[pi]?.thirdPlaces as string[] | undefined;
-    if (allGroupsPredicted && predThirdPlaces?.length === 8) {
-      const actualR32Teams = new Set(
-        buildR32Bracket(getQualifiers(results)).flatMap(m => [m.home, m.away]).filter(t => t !== "3rd TBD")
-      );
-      buildPredR32(pi, predictions).forEach(m => {
-        if (m.home !== "3rd TBD" && actualR32Teams.has(m.home)) knockout["R32"] += r32.pts;
-        if (m.away !== "3rd TBD" && actualR32Teams.has(m.away)) knockout["R32"] += r32.pts;
-      });
+    if (r32 && r16 && qf && sf && fin) {
+      const allGroupsPredicted = Object.keys(groups).every(g => playerGroupIsComplete(pi, g, predictions));
+      const allGroupsComplete  = Object.keys(groups).every(g => groupIsComplete(g, results));
+      const predThirdPlaces = predictions[pi]?.thirdPlaces as string[] | undefined;
+      if (allGroupsPredicted && allGroupsComplete && predThirdPlaces?.length === 8) {
+        const actualR32Teams = new Set(
+          buildR32Bracket(getQualifiers(results)).flatMap(m => [m.home, m.away]).filter(t => t !== "3rd TBD")
+        );
+        buildPredR32(pi, predictions).forEach(m => {
+          if (m.home !== "3rd TBD" && actualR32Teams.has(m.home)) knockout["R32"] += r32.pts;
+          if (m.away !== "3rd TBD" && actualR32Teams.has(m.away)) knockout["R32"] += r32.pts;
+        });
+      }
+
+      const koW    = (predictions[pi]?.knockoutWinners ?? {}) as Record<string, string | null>;
+      const actKoW = (results.knockoutWinners ?? {}) as Record<string, string | null>;
+      const koTeams  = (ids: string[], src: Record<string, string | null>) =>
+        new Set(ids.map(id => src[id]).filter((t): t is string => !!t));
+      const overlap = (a: Set<string>, b: Set<string>) => [...a].filter(t => b.has(t)).length;
+
+      knockout["R16"]   = overlap(koTeams(r32.matchIds, koW), koTeams(r32.matchIds, actKoW)) * r16.pts;
+      knockout["QF"]    = overlap(koTeams(r16.matchIds, koW), koTeams(r16.matchIds, actKoW)) * qf.pts;
+      knockout["SF"]    = overlap(koTeams(qf.matchIds,  koW), koTeams(qf.matchIds,  actKoW)) * sf.pts;
+      knockout["Final"] = overlap(koTeams(sf.matchIds,  koW), koTeams(sf.matchIds,  actKoW)) * fin.pts;
+      if (koW["M104"] && actKoW["M104"] && koW["M104"] === actKoW["M104"]) knockout["Winner"] = WinnerPoints;
     }
-
-    const koW    = (predictions[pi]?.knockoutWinners ?? {}) as Record<string, string | null>;
-    const actKoW = (results.knockoutWinners ?? {}) as Record<string, string | null>;
-    const koTeams  = (ids: string[], src: Record<string, string | null>) =>
-      new Set(ids.map(id => src[id]).filter((t): t is string => !!t));
-    const overlap = (a: Set<string>, b: Set<string>) => [...a].filter(t => b.has(t)).length;
-
-    knockout["R16"]   = overlap(koTeams(r32.matchIds, koW), koTeams(r32.matchIds, actKoW)) * r16.pts;
-    knockout["QF"]    = overlap(koTeams(r16.matchIds, koW), koTeams(r16.matchIds, actKoW)) * qf.pts;
-    knockout["SF"]    = overlap(koTeams(qf.matchIds,  koW), koTeams(qf.matchIds,  actKoW)) * sf.pts;
-    knockout["Final"] = overlap(koTeams(sf.matchIds,  koW), koTeams(sf.matchIds,  actKoW)) * fin.pts;
-    if (koW["M104"] && actKoW["M104"] && koW["M104"] === actKoW["M104"]) knockout["Winner"] = WinnerPoints;
 
     return { outcomes, table, bonus, knockout };
   }
@@ -353,6 +373,7 @@ export default function App() {
   );
 
   return (
+    <TournamentProvider value={tournamentConfig}>
     <div style={{ minHeight:"100vh",background:THEME.bgPage,fontFamily:"'Barlow Condensed','Arial Narrow',Arial,sans-serif",color:THEME.textPrimary,paddingBottom:80 }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500&display=swap');
@@ -406,6 +427,12 @@ export default function App() {
                 {t}
               </button>
             ))}
+            {isAdmin && (
+              <button className="tab-btn" onClick={() => setTab("Setup")}
+                style={{ color:tab==="Setup"?THEME.headerTabActive:THEME.headerMuted,borderBottom:tab==="Setup"?`2px solid ${THEME.headerTabActive}`:"2px solid transparent",flexShrink:0 }}>
+                Setup
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -465,7 +492,17 @@ export default function App() {
             calcScoreBreakdown={calcScoreBreakdown}
           />
         )}
+
+        {tab === "Setup" && isAdmin && (
+          <SetupTab
+            activePlayers={activePlayers}
+            lockDate={lockDate}
+            resultsLocked={resultsLocked}
+            onReload={() => loadAllData().then(applyData).catch(console.error)}
+          />
+        )}
       </div>
     </div>
+    </TournamentProvider>
   );
 }

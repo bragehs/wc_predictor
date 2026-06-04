@@ -1,5 +1,5 @@
 import type { AllResults } from "../types/index";
-import { GROUPS, flag } from "../data";
+import { useFlag, useTournament } from "../context/TournamentContext";
 import { THEME } from "../theme";
 import { calcGroupStandings } from "../bracketLogic";
 
@@ -10,8 +10,8 @@ interface TiebreakerSectionProps {
   isLocked: boolean;
 }
 
-function findTiedTeams(group: string, results: AllResults): string[] {
-  const teams = GROUPS[group];
+function findTiedTeams(group: string, results: AllResults, groups: Record<string, string[]>): string[] {
+  const teams = groups[group];
   if (!teams) return [];
   const s = calcGroupStandings(group, teams, results);
   const tied = new Set<string>();
@@ -27,7 +27,9 @@ function findTiedTeams(group: string, results: AllResults): string[] {
 }
 
 export default function TiebreakerSection({ group, results, setTiebreaker, isLocked }: TiebreakerSectionProps) {
-  const tiedTeams = findTiedTeams(group, results);
+  const flag = useFlag();
+  const { groups } = useTournament();
+  const tiedTeams = findTiedTeams(group, results, groups);
   if (tiedTeams.length === 0) return null;
   const tb = (results.tiebreakers as Record<string, { yellowCards?: Record<string, number>; fifaRankings?: Record<string, number> }> | undefined)?.[group] ?? {};
   const inputStyle: React.CSSProperties = { width:"100%",background:THEME.bgInput,border:`1.5px solid ${THEME.borderInput}`,color:THEME.textPrimary,fontSize:13,textAlign:"center",padding:"4px 6px",borderRadius:5,outline:"none",fontFamily:"inherit" };

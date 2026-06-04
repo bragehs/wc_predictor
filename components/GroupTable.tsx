@@ -1,5 +1,5 @@
 import type { AllResults } from "../types/index";
-import { flag } from "../data";
+import { useFlag } from "../context/TournamentContext";
 import { calcGroupStandings } from "../bracketLogic";
 import { THEME } from "../theme";
 
@@ -11,6 +11,7 @@ interface GroupTableProps {
 }
 
 export default function GroupTable({ group, teams, results, highlight }: GroupTableProps) {
+  const flag = useFlag();
   if (!teams) return null;
   const s = calcGroupStandings(group, teams, results);
   return (

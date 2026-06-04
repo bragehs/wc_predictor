@@ -1,9 +1,10 @@
-import { SCORING, BONUS_QUESTIONS, WinnerPoints } from "../config";
-import { KNOCKOUT_ROUNDS_META } from "../bracketLogic";
+import { useTournament } from "../context/TournamentContext";
+import { SCORING, WinnerPoints } from "../config";
 import { THEME } from "../theme";
 import STitle from "../components/STitle";
 
 export default function RulesTab() {
+  const { bonusQuestions, knockoutRounds } = useTournament();
   return (
     <div>
       <STitle>Rules</STitle>
@@ -12,13 +13,13 @@ export default function RulesTab() {
         <div><b style={{color:THEME.textPrimary}}>+{SCORING.correctOutcome} pt</b> — riktig tips (H/U/B) per kamp</div>
         <div><b style={{color:THEME.textPrimary}}>+{SCORING.tablePosition} pt</b> — riktig tabellplassering per lag</div>
         <div style={{ marginTop:6,paddingTop:6,borderTop:`1px solid ${THEME.borderMuted}` }}>
-          {KNOCKOUT_ROUNDS_META.map(r => (
+          {knockoutRounds.map(r => (
             <div key={r.id}><b style={{color:THEME.textPrimary}}>+{r.pts} pts</b> — {r.label}</div>
           ))}
           <div><b style={{color:THEME.textPrimary}}>+{WinnerPoints} pts</b> — {"Winner"}</div>
         </div>
         <div style={{ marginTop:6,paddingTop:6,borderTop:`1px solid ${THEME.borderMuted}` }}>
-          {BONUS_QUESTIONS.map(bq => (
+          {bonusQuestions.map(bq => (
             <div key={bq.id}><b style={{color:THEME.textPrimary}}>+{bq.pts} pts</b> — {bq.label}</div>
           ))}
         </div>
