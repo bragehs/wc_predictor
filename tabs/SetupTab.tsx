@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { BonusQuestion, KnockoutRoundMeta, GroupMatch } from "../types/index";
 import { useTournament } from "../context/TournamentContext";
 import { THEME } from "../theme";
@@ -15,7 +15,7 @@ interface SetupTabProps {
   activePlayers: string[];
   lockDate: Date | null;
   resultsLocked: boolean;
-  onReload: () => void;
+  onReload: () => Promise<void>;
 }
 
 const sectionStyle: React.CSSProperties = {
@@ -147,21 +147,51 @@ export default function SetupTab({ activePlayers, lockDate, resultsLocked, onRel
   }
 
   // ── Settings ──────────────────────────────────────────────────────────────
-  const [lockDateStr, setLockDateStr] = useState(lockDate ? lockDate.toISOString().slice(0, 16) : "");
+  const toLocalStr = (d: Date) => {
+    const off = d.getTimezoneOffset() * 60000;
+    return new Date(d.getTime() - off).toISOString().slice(0, 16);
+  };
+
+  const [lockDateStr, setLockDateStr] = useState(lockDate ? toLocalStr(lockDate) : "");
   const [locked, setLocked] = useState(resultsLocked);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => { setLockDateStr(lockDate ? toLocalStr(lockDate) : ""); }, [lockDate]);
+  useEffect(() => { setLocked(resultsLocked); }, [resultsLocked]);
 
   async function handleSaveSettings() {
+    setSaving(true);
     const dateVal = lockDateStr ? new Date(lockDateStr).toISOString() : null;
     await Promise.all([
       saveSetting("predictions_lock_date", dateVal ?? "null"),
       saveSetting("results_locked", locked),
     ]).catch(console.error);
-    onReload();
+    await onReload();
+    setSaving(false);
   }
 
   return (
     <div>
       <STitle>Setup</STitle>
+
+      {/* Settings */}
+      <div style={sectionStyle}>
+        <div style={labelStyle}>Settings</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <label style={{ fontSize: 13, color: THEME.textSecondary }}>
+            Predictions lock date/time
+            <input type="datetime-local" style={{ ...inputStyle, display: "block", marginTop: 4, width: "100%" }}
+              value={lockDateStr} onChange={e => setLockDateStr(e.target.value)} />
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: THEME.textSecondary, cursor: "pointer" }}>
+            <input type="checkbox" checked={locked} onChange={e => setLocked(e.target.checked)} />
+            Results locked
+          </label>
+          <button style={{ ...btnStyle(THEME.blue), color: "#fff", alignSelf: "flex-start", opacity: saving ? 0.6 : 1 }} onClick={handleSaveSettings} disabled={saving}>
+            {saving ? "Saving…" : "Save settings"}
+          </button>
+        </div>
+      </div>
 
       {/* Players */}
       <div style={sectionStyle}>
@@ -257,24 +287,6 @@ export default function SetupTab({ activePlayers, lockDate, resultsLocked, onRel
         </div>
       </div>
 
-      {/* Settings */}
-      <div style={sectionStyle}>
-        <div style={labelStyle}>Settings</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <label style={{ fontSize: 13, color: THEME.textSecondary }}>
-            Predictions lock date/time
-            <input type="datetime-local" style={{ ...inputStyle, display: "block", marginTop: 4, width: "100%" }}
-              value={lockDateStr} onChange={e => setLockDateStr(e.target.value)} />
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: THEME.textSecondary, cursor: "pointer" }}>
-            <input type="checkbox" checked={locked} onChange={e => setLocked(e.target.checked)} />
-            Results locked
-          </label>
-          <button style={{ ...btnStyle(THEME.blue), color: "#fff", alignSelf: "flex-start" }} onClick={handleSaveSettings}>
-            Save settings
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

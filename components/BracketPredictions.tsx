@@ -1,7 +1,7 @@
 import type { AllPredictions, AllResults } from "../types/index";
 import { useTournament, useFlag } from "../context/TournamentContext";
 import { THEME } from "../theme";
-import { buildR32Bracket, getKnockoutMatchup } from "../bracketLogic";
+import { buildFirstKOBracket, getKnockoutMatchup, THIRD_PLACE_COUNT } from "../bracketLogic";
 import { buildPredQualifiers } from "../helpers";
 
 interface BracketPredictionsProps {
@@ -27,13 +27,13 @@ export default function BracketPredictions({
   const thirds = Object.entries(groups).map(([g]) => ({
     group: g, team: predQ[g]?.third ?? `3rd ${g}`,
   }));
-  const r32 = buildR32Bracket(predQ, thirdPicks.length === 8 ? thirdPicks : null);
+  const firstKO = buildFirstKOBracket(predQ, thirdPicks.length === THIRD_PLACE_COUNT ? thirdPicks : null);
 
   const toggleThird = (g: string) => {
     if (!isEditable) return;
     if (thirdPicks.includes(g)) {
       setThirdPlacesPred(pi, thirdPicks.filter(x => x !== g));
-    } else if (thirdPicks.length < 8) {
+    } else if (thirdPicks.length < THIRD_PLACE_COUNT) {
       setThirdPlacesPred(pi, [...thirdPicks, g]);
     }
   };
@@ -81,7 +81,7 @@ export default function BracketPredictions({
             <div style={{ fontSize:12,background:THEME.goldBg,color:THEME.gold,border:`1px solid ${THEME.goldBorder}`,borderRadius:4,padding:"2px 8px",fontWeight:700 }}>+{round.pts} pts</div>
           </div>
           {round.matchIds.map(mid => {
-            const { home, away } = getKnockoutMatchup(mid, r32, koWinners);
+            const { home, away } = getKnockoutMatchup(mid, firstKO, koWinners);
             const winner  = koWinners[mid] ?? null;
             const actual  = (actKoW as Record<string, string | null>)[mid];
             const correct = actual && winner && winner === actual;

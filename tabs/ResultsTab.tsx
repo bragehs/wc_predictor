@@ -2,7 +2,7 @@ import type { AllResults, AllPredictions } from "../types/index";
 import { useTournament, useFlag } from "../context/TournamentContext";
 import { THEME } from "../theme";
 import {
-  getQualifiers, buildR32Bracket, getKnockoutMatchup,
+  getQualifiers, buildFirstKOBracket, getKnockoutMatchup,
 } from "../bracketLogic";
 import STitle from "../components/STitle";
 import GroupTable from "../components/GroupTable";
@@ -16,6 +16,7 @@ interface ResultsTabProps {
   setKnockoutWinnerResult: (matchId: string, team: string | null) => void;
   setTiebreaker: (group: string, type: string, team: string, val: number | undefined) => void;
   isLocked: boolean;
+  isAdmin: boolean;
   activePlayers: string[];
   predictions: AllPredictions;
   setBonusIsCorrect: (playerName: string, qid: string, isCorrect: boolean) => void;
@@ -24,12 +25,12 @@ interface ResultsTabProps {
 export default function ResultsTab({
   groupFilter, setGroupFilter,
   results, setResult, setKnockoutWinnerResult, setTiebreaker,
-  isLocked, activePlayers, predictions, setBonusIsCorrect,
+  isLocked, isAdmin, activePlayers, predictions, setBonusIsCorrect,
 }: ResultsTabProps) {
   const { groups, groupMatches, bonusQuestions, knockoutRounds } = useTournament();
   const flag = useFlag();
   const actualQ   = getQualifiers(results);
-  const actualR32 = buildR32Bracket(actualQ);
+  const firstKOBracket = buildFirstKOBracket(actualQ);
   const koWinners = (results.knockoutWinners ?? {}) as Record<string, string | null>;
 
   return (
@@ -113,19 +114,19 @@ export default function ResultsTab({
                       {answer ?? "no answer"}
                     </span>
                     <button
-                      onClick={() => !isLocked && setBonusIsCorrect(playerName, bq.id, !isCorrect)}
+                      onClick={() => isAdmin && !isLocked && setBonusIsCorrect(playerName, bq.id, !isCorrect)}
                       style={{
                         background: isCorrect ? THEME.green : THEME.bgInput,
                         border: `1.5px solid ${isCorrect ? THEME.green : THEME.borderInput}`,
                         color: isCorrect ? "#000" : THEME.textMuted,
                         borderRadius: 5,
                         padding: "4px 12px",
-                        cursor: isLocked ? "default" : "pointer",
+                        cursor: isAdmin && !isLocked ? "pointer" : "default",
                         fontSize: 12,
                         fontWeight: 700,
                         fontFamily: "'Barlow Condensed', Arial",
-                        opacity: isLocked ? 0.5 : 1,
                         flexShrink: 0,
+                        visibility: isAdmin || isCorrect ? "visible" : "hidden",
                       }}>
                       {isCorrect ? "Correct" : "Mark correct"}
                     </button>
@@ -146,7 +147,7 @@ export default function ResultsTab({
                 <div style={{ fontSize:10,background:THEME.blueBg,color:THEME.blue,border:`1px solid ${THEME.blueBorder}`,borderRadius:4,padding:"1px 7px" }}>+{round.pts} pts</div>
               </div>
               {round.matchIds.map(mid => {
-                const { home, away } = getKnockoutMatchup(mid, actualR32, koWinners);
+                const { home, away } = getKnockoutMatchup(mid, firstKOBracket, koWinners);
                 const winner = koWinners[mid] ?? null;
                 const bothKnown = !home.startsWith("W(") && home !== "TBD" && !away.startsWith("W(") && away !== "TBD";
                 return (

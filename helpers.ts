@@ -10,7 +10,8 @@ import { SCORING } from "./config";
 import { GROUPS, GROUP_MATCHES } from "./tournamentStore";
 import {
   calcGroupStandingsFromOutcomes,
-  buildR32Bracket,
+  buildFirstKOBracket,
+  THIRD_PLACE_COUNT,
 } from "./bracketLogic";
 
 export function groupIsComplete(g: string, results: AllResults): boolean {
@@ -97,8 +98,8 @@ export function buildPredQualifiers(pi: number, predictions: AllPredictions): Qu
   return qualifiers;
 }
 
-export function buildPredR32(pi: number, predictions: AllPredictions) {
+export function buildPredFirstKOBracket(pi: number, predictions: AllPredictions) {
   const q = buildPredQualifiers(pi, predictions);
   const thirdPlaces = predictions[pi]?.thirdPlaces as string[] | undefined;
-  return buildR32Bracket(q, thirdPlaces?.length === 8 ? thirdPlaces : null);
+  return buildFirstKOBracket(q, thirdPlaces?.length === THIRD_PLACE_COUNT ? thirdPlaces : null);
 }

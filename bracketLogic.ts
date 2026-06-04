@@ -9,13 +9,13 @@ import type {
 import { GROUPS, GROUP_MATCHES } from "./tournamentStore";
 
 export {
-  buildR32Bracket,
+  buildFirstKOBracket,
   getBestThirdPlaces,
-  lookupScenario,
   getKnockoutMatchup,
-  FIXED_R32,
-  VARIABLE_R32_WINNERS,
   BRACKET_FEEDS,
+  FINAL_MATCH_ID,
+  QUALIFICATION_ROUND_ID,
+  THIRD_PLACE_COUNT,
 } from "./tournaments/active";
 
 // ── Group Standings ───────────────────────────────────────────────────────────

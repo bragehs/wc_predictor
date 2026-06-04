@@ -2,8 +2,8 @@ import type { AllPredictions, AllResults, BracketView } from "../types/index";
 import { COLORS } from "../config";
 import { THEME } from "../theme";
 import {
-  getQualifiers, buildR32Bracket, getKnockoutMatchup,
-  getBestThirdPlaces,
+  getQualifiers, buildFirstKOBracket, getKnockoutMatchup,
+  getBestThirdPlaces, THIRD_PLACE_COUNT,
 } from "../bracketLogic";
 import { useTournament, useFlag } from "../context/TournamentContext";
 import { buildPredQualifiers } from "../helpers";
@@ -33,8 +33,8 @@ export default function BracketTab({
   const thirdPicks = isActual
     ? null
     : (predictions[bracketView as number]?.thirdPlaces as string[] | undefined) ?? null;
-  const r32   = buildR32Bracket(qualifiers, thirdPicks?.length === 8 ? thirdPicks : null);
-  const best8 = getBestThirdPlaces(qualifiers);
+  const firstKO   = buildFirstKOBracket(qualifiers, thirdPicks?.length === THIRD_PLACE_COUNT ? thirdPicks : null);
+  const best8 = THIRD_PLACE_COUNT > 0 ? getBestThirdPlaces(qualifiers) : [];
 
   return (
     <div>
@@ -70,7 +70,7 @@ export default function BracketTab({
           <div style={{ fontSize:12,color:THEME.textMuted,letterSpacing:1,textTransform:"uppercase",marginBottom:6 }}>{round.label}</div>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:5 }}>
             {round.matchIds.map(mid => {
-              const { home, away } = getKnockoutMatchup(mid, r32, koWinners);
+              const { home, away } = getKnockoutMatchup(mid, firstKO, koWinners);
               const winner = koWinners[mid];
               return <BracketMatch key={mid} label={mid} t1={home} t2={away} winner={winner}/>;
             })}

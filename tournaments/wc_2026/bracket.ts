@@ -1,24 +1,16 @@
 import type { R32Match, Qualifiers, ThirdPlaceEntry, GroupStandingRow } from "../../types/index";
 import { RAW_SCENARIOS } from "./third_place_combinations";
 
-// ── WC 2026 — fixed R32 matchups ─────────────────────────────────────────────
+// ── Tournament contract ───────────────────────────────────────────────────────
+// These four exports define the interface every tournament module must provide.
+// When adding a new tournament (e.g. euro_2028), implement all four here and
+// point tournaments/active.ts at the new file.
 
-export const FIXED_R32: R32Match[] = [
-  { id:"M73", home:"A2", away:"B2" },
-  { id:"M75", home:"F1", away:"C2" },
-  { id:"M76", home:"C1", away:"F2" },
-  { id:"M78", home:"E2", away:"I2" },
-  { id:"M83", home:"K2", away:"L2" },
-  { id:"M84", home:"H1", away:"J2" },
-  { id:"M86", home:"J1", away:"H2" },
-  { id:"M88", home:"D2", away:"G2" },
-];
+export const FINAL_MATCH_ID = "M104";
+export const QUALIFICATION_ROUND_ID: string | null = "R32";
+export const THIRD_PLACE_COUNT: number = 8;
 
-// Which group's 3rd-place team fills each variable R32 slot
-export const VARIABLE_R32_WINNERS: Record<string, string> = {
-  M74: "E", M77: "I", M79: "A", M80: "L",
-  M81: "D", M82: "G", M85: "B", M87: "K",
-};
+// ── WC 2026 internals ─────────────────────────────────────────────────────────
 
 // Processing order for mapping scenario array values to match slots
 export const VAR_MATCH_ORDER = ["M79","M85","M81","M74","M82","M77","M87","M80"] as const;
@@ -79,7 +71,7 @@ export function getKnockoutMatchup(
   };
 }
 
-export function buildR32Bracket(qualifiers: Qualifiers, qualifyingGroups?: string[] | null): R32Match[] {
+export function buildFirstKOBracket(qualifiers: Qualifiers, qualifyingGroups?: string[] | null): R32Match[] {
   const q8 = qualifyingGroups ?? getBestThirdPlaces(qualifiers).map(t => t.group);
   const scenario = q8.length === 8 ? lookupScenario(q8) : null;
 

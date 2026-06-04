@@ -2,10 +2,10 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import type { MatchPrediction, TabName, AllPredictions, AllResults, MatchOutcome, BracketView, ScoreBreakdown } from "./types/index.ts";
 import { SCORING, MAX_PLAYERS, COLORS, TABS, WinnerPoints } from "./config.ts";
 import { THEME } from "./theme.ts";
-import { calcGroupStandings, getQualifiers, buildR32Bracket } from "./bracketLogic.ts";
+import { calcGroupStandings, getQualifiers, buildFirstKOBracket, FINAL_MATCH_ID, QUALIFICATION_ROUND_ID, THIRD_PLACE_COUNT } from "./bracketLogic.ts";
 import {
   groupIsComplete, playerGroupIsComplete, pointsForOutcome,
-  getPredEffectiveOrder, buildPredR32,
+  getPredEffectiveOrder, buildPredFirstKOBracket,
 } from "./helpers.ts";
 import {
   loadAllData, loadResults,
@@ -272,23 +272,7 @@ export default function App() {
       const isCorrect = (predictions[pi]?.bonusCorrect as Record<string, boolean> | undefined)?.[bq.id];
       if (isCorrect === true) score += bq.pts;
     });
-    const roundsById = Object.fromEntries(knockoutRounds.map(r => [r.id, r]));
-    const r32 = roundsById["R32"], r16 = roundsById["R16"];
-    const qf  = roundsById["QF"],  sf  = roundsById["SF"], fin = roundsById["Final"];
-    if (!r32 || !r16 || !qf || !sf || !fin) return score;
-
-    const allGroupsPredicted = Object.keys(groups).every(g => playerGroupIsComplete(pi, g, predictions));
-    const allGroupsComplete  = Object.keys(groups).every(g => groupIsComplete(g, results));
-    const predThirdPlaces = predictions[pi]?.thirdPlaces as string[] | undefined;
-    if (allGroupsPredicted && allGroupsComplete && predThirdPlaces?.length === 8) {
-      const actualR32Teams = new Set(
-        buildR32Bracket(getQualifiers(results)).flatMap(m => [m.home, m.away]).filter(t => t !== "3rd TBD")
-      );
-      buildPredR32(pi, predictions).forEach(m => {
-        if (m.home !== "3rd TBD" && actualR32Teams.has(m.home)) score += r32.pts;
-        if (m.away !== "3rd TBD" && actualR32Teams.has(m.away)) score += r32.pts;
-      });
-    }
+    if (knockoutRounds.length === 0) return score;
 
     const koW    = (predictions[pi]?.knockoutWinners ?? {}) as Record<string, string | null>;
     const actKoW = (results.knockoutWinners ?? {}) as Record<string, string | null>;
@@ -296,11 +280,37 @@ export default function App() {
       new Set(ids.map(id => src[id]).filter((t): t is string => !!t));
     const overlap = (a: Set<string>, b: Set<string>) => [...a].filter(t => b.has(t)).length;
 
-    score += overlap(koTeams(r32.matchIds, koW), koTeams(r32.matchIds, actKoW)) * r16.pts;
-    score += overlap(koTeams(r16.matchIds, koW), koTeams(r16.matchIds, actKoW)) * qf.pts;
-    score += overlap(koTeams(qf.matchIds,  koW), koTeams(qf.matchIds,  actKoW)) * sf.pts;
-    score += overlap(koTeams(sf.matchIds,  koW), koTeams(sf.matchIds,  actKoW)) * fin.pts;
-    if (koW["M104"] && actKoW["M104"] && koW["M104"] === actKoW["M104"]) score += WinnerPoints;
+    // Group-stage qualification scoring (who made it into the first KO round)
+    if (QUALIFICATION_ROUND_ID) {
+      const qualRound = knockoutRounds.find(r => r.id === QUALIFICATION_ROUND_ID);
+      if (qualRound) {
+        const allGroupsPredicted = Object.keys(groups).every(g => playerGroupIsComplete(pi, g, predictions));
+        const allGroupsComplete  = Object.keys(groups).every(g => groupIsComplete(g, results));
+        const predThirdPlaces    = predictions[pi]?.thirdPlaces as string[] | undefined;
+        const thirdPlaceReady    = THIRD_PLACE_COUNT === 0 || predThirdPlaces?.length === THIRD_PLACE_COUNT;
+        if (allGroupsPredicted && allGroupsComplete && thirdPlaceReady) {
+          const actualQualTeams = new Set(
+            buildFirstKOBracket(getQualifiers(results)).flatMap(m => [m.home, m.away]).filter(t => t !== "3rd TBD")
+          );
+          buildPredFirstKOBracket(pi, predictions).forEach(m => {
+            if (m.home !== "3rd TBD" && actualQualTeams.has(m.home)) score += qualRound.pts;
+            if (m.away !== "3rd TBD" && actualQualTeams.has(m.away)) score += qualRound.pts;
+          });
+        }
+      }
+    }
+
+    // Round advancement scoring: winning round[i] earns round[i+1].pts
+    for (let i = 0; i < knockoutRounds.length - 1; i++) {
+      const cur  = knockoutRounds[i];
+      const next = knockoutRounds[i + 1];
+      score += overlap(koTeams(cur.matchIds, koW), koTeams(cur.matchIds, actKoW)) * next.pts;
+    }
+
+    // Winner bonus
+    if (koW[FINAL_MATCH_ID] && actKoW[FINAL_MATCH_ID] && koW[FINAL_MATCH_ID] === actKoW[FINAL_MATCH_ID]) {
+      score += WinnerPoints;
+    }
 
     return score;
   }
@@ -330,35 +340,44 @@ export default function App() {
       if (isCorrect === true) bonus += bq.pts;
     });
 
-    const roundsById = Object.fromEntries(knockoutRounds.map(r => [r.id, r]));
-    const r32 = roundsById["R32"], r16 = roundsById["R16"];
-    const qf  = roundsById["QF"],  sf  = roundsById["SF"], fin = roundsById["Final"];
-
-    if (r32 && r16 && qf && sf && fin) {
-      const allGroupsPredicted = Object.keys(groups).every(g => playerGroupIsComplete(pi, g, predictions));
-      const allGroupsComplete  = Object.keys(groups).every(g => groupIsComplete(g, results));
-      const predThirdPlaces = predictions[pi]?.thirdPlaces as string[] | undefined;
-      if (allGroupsPredicted && allGroupsComplete && predThirdPlaces?.length === 8) {
-        const actualR32Teams = new Set(
-          buildR32Bracket(getQualifiers(results)).flatMap(m => [m.home, m.away]).filter(t => t !== "3rd TBD")
-        );
-        buildPredR32(pi, predictions).forEach(m => {
-          if (m.home !== "3rd TBD" && actualR32Teams.has(m.home)) knockout["R32"] += r32.pts;
-          if (m.away !== "3rd TBD" && actualR32Teams.has(m.away)) knockout["R32"] += r32.pts;
-        });
-      }
-
+    if (knockoutRounds.length > 0) {
       const koW    = (predictions[pi]?.knockoutWinners ?? {}) as Record<string, string | null>;
       const actKoW = (results.knockoutWinners ?? {}) as Record<string, string | null>;
       const koTeams  = (ids: string[], src: Record<string, string | null>) =>
         new Set(ids.map(id => src[id]).filter((t): t is string => !!t));
       const overlap = (a: Set<string>, b: Set<string>) => [...a].filter(t => b.has(t)).length;
 
-      knockout["R16"]   = overlap(koTeams(r32.matchIds, koW), koTeams(r32.matchIds, actKoW)) * r16.pts;
-      knockout["QF"]    = overlap(koTeams(r16.matchIds, koW), koTeams(r16.matchIds, actKoW)) * qf.pts;
-      knockout["SF"]    = overlap(koTeams(qf.matchIds,  koW), koTeams(qf.matchIds,  actKoW)) * sf.pts;
-      knockout["Final"] = overlap(koTeams(sf.matchIds,  koW), koTeams(sf.matchIds,  actKoW)) * fin.pts;
-      if (koW["M104"] && actKoW["M104"] && koW["M104"] === actKoW["M104"]) knockout["Winner"] = WinnerPoints;
+      // Group-stage qualification scoring
+      if (QUALIFICATION_ROUND_ID) {
+        const qualRound = knockoutRounds.find(r => r.id === QUALIFICATION_ROUND_ID);
+        if (qualRound) {
+          const allGroupsPredicted = Object.keys(groups).every(g => playerGroupIsComplete(pi, g, predictions));
+          const allGroupsComplete  = Object.keys(groups).every(g => groupIsComplete(g, results));
+          const predThirdPlaces    = predictions[pi]?.thirdPlaces as string[] | undefined;
+          const thirdPlaceReady    = THIRD_PLACE_COUNT === 0 || predThirdPlaces?.length === THIRD_PLACE_COUNT;
+          if (allGroupsPredicted && allGroupsComplete && thirdPlaceReady) {
+            const actualQualTeams = new Set(
+              buildFirstKOBracket(getQualifiers(results)).flatMap(m => [m.home, m.away]).filter(t => t !== "3rd TBD")
+            );
+            buildPredFirstKOBracket(pi, predictions).forEach(m => {
+              if (m.home !== "3rd TBD" && actualQualTeams.has(m.home)) knockout[QUALIFICATION_ROUND_ID!] += qualRound.pts;
+              if (m.away !== "3rd TBD" && actualQualTeams.has(m.away)) knockout[QUALIFICATION_ROUND_ID!] += qualRound.pts;
+            });
+          }
+        }
+      }
+
+      // Round advancement scoring
+      for (let i = 0; i < knockoutRounds.length - 1; i++) {
+        const cur  = knockoutRounds[i];
+        const next = knockoutRounds[i + 1];
+        knockout[next.id] = overlap(koTeams(cur.matchIds, koW), koTeams(cur.matchIds, actKoW)) * next.pts;
+      }
+
+      // Winner bonus
+      if (koW[FINAL_MATCH_ID] && actKoW[FINAL_MATCH_ID] && koW[FINAL_MATCH_ID] === actKoW[FINAL_MATCH_ID]) {
+        knockout["Winner"] = WinnerPoints;
+      }
     }
 
     return { outcomes, table, bonus, knockout };
@@ -469,6 +488,7 @@ export default function App() {
             setKnockoutWinnerResult={setKnockoutWinnerResult}
             setTiebreaker={setTiebreaker}
             isLocked={isResultsLocked}
+            isAdmin={isAdmin}
             activePlayers={activePlayers}
             predictions={predictions}
             setBonusIsCorrect={setBonusIsCorrect}

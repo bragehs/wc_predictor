@@ -1,6 +1,6 @@
 import { supabase } from "./supabase";
 import type { AllPredictions, AllResults, BonusQuestion, GroupMatch, KnockoutRoundMeta } from "./types/index";
-import { ROUND_MATCH_IDS } from "./tournaments/wc_2026/bracket";
+import { ROUND_MATCH_IDS } from "./tournaments/active";
 
 const TOURNAMENT_ID = "wc_2026";
 

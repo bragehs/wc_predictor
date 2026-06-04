@@ -16,7 +16,8 @@ export default function GroupTable({ group, teams, results, highlight }: GroupTa
   const s = calcGroupStandings(group, teams, results);
   return (
     <div style={{ background:THEME.bgCard,borderRadius:8,overflow:"hidden",border:`1px solid ${THEME.borderCard}`,fontSize:12 }}>
-      <div style={{ display:"grid",gridTemplateColumns:"1fr 26px 26px 26px 34px 34px",padding:"4px 10px",background:THEME.bgInset,color:THEME.textMuted,fontSize:9,letterSpacing:1,textTransform:"uppercase" }}>
+      <div style={{ display:"grid",gridTemplateColumns:"18px 1fr 26px 26px 26px 34px 34px",padding:"4px 10px",background:THEME.bgInset,color:THEME.textMuted,fontSize:9,letterSpacing:1,textTransform:"uppercase" }}>
+        <div></div>
         <div>Team</div>
         <div style={{textAlign:"center"}}>W</div>
         <div style={{textAlign:"center"}}>D</div>
@@ -25,7 +26,8 @@ export default function GroupTable({ group, teams, results, highlight }: GroupTa
         <div style={{textAlign:"center",color:THEME.gold}}>Pts</div>
       </div>
       {s.map((row, i) => (
-        <div key={row.team} style={{ display:"grid",gridTemplateColumns:"1fr 26px 26px 26px 34px 34px",padding:"5px 10px",background:i%2===0?THEME.bgRow:THEME.bgRowAlt,borderTop:`1px solid ${THEME.borderFaint}` }}>
+        <div key={row.team} style={{ display:"grid",gridTemplateColumns:"18px 1fr 26px 26px 26px 34px 34px",padding:"5px 10px",background:i%2===0?THEME.bgRow:THEME.bgRowAlt,borderTop:`1px solid ${THEME.borderFaint}` }}>
+          <div style={{ fontSize:10,color:THEME.textMuted,fontWeight:700,display:"flex",alignItems:"center" }}>{i+1}</div>
           <div style={{ display:"flex",alignItems:"center",gap:5 }}>
             {highlight && i < 2 && <span style={{ width:3,height:12,borderRadius:1,background:i===0?THEME.gold:THEME.blue,display:"inline-block",flexShrink:0 }}/>}
             {highlight && i === 2 && <span style={{ width:3,height:12,borderRadius:1,background:THEME.textMuted,display:"inline-block",flexShrink:0 }}/>}
