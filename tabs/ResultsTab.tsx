@@ -63,7 +63,7 @@ export default function ResultsTab({
 
       {!["BONUS", "KNOCKOUT", "BRACKET"].includes(groupFilter) && (
         <>
-          {groupMatches.filter(m => m.group === groupFilter).sort((a, b) => a.date.localeCompare(b.date)).map(m => {
+          {groupMatches.filter(m => m.group === groupFilter).map(m => {
             const actual = results[m.id] as { home?: string; away?: string } | undefined ?? {};
             return (
               <div key={m.id} className="match-row">

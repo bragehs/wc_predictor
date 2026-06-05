@@ -4,6 +4,13 @@ import { ROUND_MATCH_IDS } from "./tournaments/active";
 
 const TOURNAMENT_ID = "wc_2026";
 
+export interface PlayerMeta {
+  name: string;
+  email: string | null;
+  isAdmin: boolean;
+  approved: boolean;
+}
+
 export interface TournamentConfigData {
   groups: Record<string, string[]>;
   groupMatches: GroupMatch[];
@@ -14,6 +21,7 @@ export interface TournamentConfigData {
 
 export interface AppData {
   players: string[];
+  playersMeta: PlayerMeta[];
   predictions: AllPredictions;
   results: AllResults;
   lockDate: Date | null;
@@ -36,7 +44,7 @@ export async function loadAllData(): Promise<AppData> {
     { data: matchRows },
     { data: tiebreakerRows },
   ] = await Promise.all([
-    supabase.from("players").select("name"),
+    supabase.from("players").select("name, email, is_admin, approved"),
     supabase.from("settings").select("key, value").eq("tournament_id", TOURNAMENT_ID),
     supabase.from("teams").select("name, flag, group_id, sort_order").eq("tournament_id", TOURNAMENT_ID).order("sort_order"),
     supabase.from("bonus_questions").select("question_id, label, pts, correct_answer").eq("tournament_id", TOURNAMENT_ID),
@@ -50,7 +58,9 @@ export async function loadAllData(): Promise<AppData> {
     supabase.from("tiebreakers").select("group_id, type, team, value").eq("tournament_id", TOURNAMENT_ID),
   ]);
 
-  const playersList = ((playerRows ?? []) as Array<{ name: string }>).map(r => r.name);
+  const playerRows2 = (playerRows ?? []) as Array<{ name: string; email: string | null; is_admin: boolean; approved: boolean }>;
+  const playersMeta: PlayerMeta[] = playerRows2.map(r => ({ name: r.name, email: r.email ?? null, isAdmin: r.is_admin ?? false, approved: r.approved ?? false }));
+  const playersList = playerRows2.filter(r => r.approved).map(r => r.name);
 
   const sm = Object.fromEntries(
     ((settingsRows ?? []) as Array<{ key: string; value: unknown }>).map(r => [r.key, r.value])
@@ -131,7 +141,7 @@ export async function loadAllData(): Promise<AppData> {
 
   const results = buildResults(matchRows, tiebreakerRows, bonusQRows);
 
-  return { players: playersList, predictions: predsObj, results, lockDate, resultsLocked, tournamentConfig };
+  return { players: playersList, playersMeta, predictions: predsObj, results, lockDate, resultsLocked, tournamentConfig };
 }
 
 export async function loadResults(): Promise<AllResults> {
@@ -287,4 +297,25 @@ export async function deletePlayer(name: string): Promise<void> {
 
 export async function saveSetting(key: string, value: unknown): Promise<void> {
   await supabase.from("settings").upsert({ tournament_id: TOURNAMENT_ID, key, value });
+}
+
+export async function savePlayerEmail(name: string, email: string): Promise<void> {
+  await supabase.from("players").update({ email: email.trim() || null }).eq("name", name);
+}
+
+export async function checkEmailExists(email: string): Promise<boolean> {
+  const { data } = await supabase.from("players").select("name").eq("email", email).maybeSingle();
+  return !!data;
+}
+
+export async function registerPlayer(name: string, email: string): Promise<{ error?: string }> {
+  const { data: nameTaken } = await supabase.from("players").select("name").eq("name", name).maybeSingle();
+  if (nameTaken) return { error: "That name is already taken. Choose a different display name." };
+  const { error } = await supabase.from("players").insert({ name, email, approved: false, is_admin: false });
+  if (error) return { error: error.message };
+  return {};
+}
+
+export async function approvePlayer(name: string): Promise<void> {
+  await supabase.from("players").update({ approved: true }).eq("name", name);
 }

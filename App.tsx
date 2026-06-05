@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import type { Session } from "@supabase/supabase-js";
+import { supabase } from "./supabase";
 import type { MatchPrediction, TabName, AllPredictions, AllResults, MatchOutcome, BracketView, ScoreBreakdown, TiebreakerData } from "./types/index.ts";
 import { SCORING, MAX_PLAYERS, COLORS, TABS, WinnerPoints } from "./config.ts";
 import { THEME } from "./theme.ts";
@@ -13,6 +15,8 @@ import {
   saveThirdPlacePicks, saveKnockoutPrediction,
   saveMatchScore, saveKnockoutWinner, saveTiebreaker, saveBonusIsCorrect,
 } from "./db.ts";
+import type { PlayerMeta } from "./db.ts";
+import AuthScreen from "./AuthScreen.tsx";
 import { initTournamentStore } from "./tournamentStore.ts";
 import { TournamentProvider } from "./context/TournamentContext.tsx";
 import type { TournamentConfig } from "./context/TournamentContext.tsx";
@@ -40,11 +44,23 @@ export default function App() {
   const [loaded, setLoaded]             = useState(false);
   const [lockDate, setLockDate]         = useState<Date | null>(null);
   const [resultsLocked, setResultsLocked] = useState(false);
+  const [session, setSession]           = useState<Session | null>(null);
+  const [authChecked, setAuthChecked]   = useState(false);
+  const [playersMeta, setPlayersMeta]   = useState<PlayerMeta[]>([]);
   const [tournamentConfig, setTournamentConfig] = useState<TournamentConfig>({
     groups: {}, groupMatches: [], flags: {}, bonusQuestions: [], knockoutRounds: [],
   });
 
-  const isAdmin = useMemo(() => new URLSearchParams(window.location.search).get("admin") === "1", []);
+  const myPlayerMeta = useMemo(
+    () => session?.user?.email ? playersMeta.find(p => p.email === session.user.email) ?? null : null,
+    [session, playersMeta]
+  );
+  const myPlayer = myPlayerMeta?.approved ? myPlayerMeta : null;
+  const isAdmin = myPlayer?.isAdmin ?? false;
+  const myPlayerIndex = useMemo(
+    () => myPlayer ? players.indexOf(myPlayer.name) : 0,
+    [myPlayer, players]
+  );
   const isLocked = !!(lockDate && new Date() > lockDate && !isAdmin);
   const isResultsLocked = resultsLocked && !isAdmin;
 
@@ -128,7 +144,19 @@ export default function App() {
     setResultsLocked(data.resultsLocked);
     setResults(data.results);
     setPredictions(data.predictions);
+    setPlayersMeta(data.playersMeta);
   }
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setAuthChecked(true);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     loadAllData().then(data => {
@@ -385,6 +413,40 @@ export default function App() {
 
   const scores = activePlayers.map((_, i) => calcScore(i));
 
+  if (!authChecked) return (
+    <div style={{ display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:THEME.bgPage,color:THEME.textPrimary,fontFamily:"monospace" }}>
+      Loading...
+    </div>
+  );
+
+  if (!session) return <AuthScreen />;
+
+  if (loaded && !myPlayer) {
+    const isPending = !!myPlayerMeta && !myPlayerMeta.approved;
+    return (
+      <div style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100vh",background:THEME.bgPage,color:THEME.textPrimary,fontFamily:"'Barlow Condensed',Arial",gap:16,textAlign:"center",padding:24 }}>
+        {isPending ? (
+          <>
+            <div style={{ fontSize:18,fontWeight:700 }}>Registration pending</div>
+            <div style={{ fontSize:14,color:THEME.textMuted,fontFamily:"'Barlow',Arial" }}>
+              Your registration as <strong>{myPlayerMeta!.name}</strong> is waiting for admin approval.
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize:18,fontWeight:700 }}>Not registered</div>
+            <div style={{ fontSize:14,color:THEME.textMuted,fontFamily:"'Barlow',Arial" }}>
+              <strong>{session.user.email}</strong> is not linked to any player.
+            </div>
+          </>
+        )}
+        <button onClick={() => supabase.auth.signOut()} style={{ background:THEME.red,border:"none",borderRadius:6,padding:"8px 20px",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:13,fontFamily:"inherit" }}>
+          Sign out
+        </button>
+      </div>
+    );
+  }
+
   if (!loaded) return (
     <div style={{ display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:THEME.bgPage,color:THEME.textPrimary,fontFamily:"monospace" }}>
       Loading...
@@ -426,7 +488,12 @@ export default function App() {
               <div style={{ fontSize:20,fontWeight:900,letterSpacing:2,textTransform:"uppercase",lineHeight:1,color:THEME.headerText }}>FIFA World Cup 2026</div>
               <div style={{ fontSize:11,color:THEME.headerSubtext,letterSpacing:3,textTransform:"uppercase",fontWeight:600 }}>Prediction Tracker</div>
             </div>
-            {isAdmin && <div style={{ fontSize:10,color:THEME.headerSubtext,letterSpacing:1,fontWeight:700,background:"rgba(255,255,255,0.15)",borderRadius:4,padding:"2px 8px" }}>ADMIN</div>}
+            <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+              {isAdmin && <div style={{ fontSize:10,color:THEME.headerSubtext,letterSpacing:1,fontWeight:700,background:"rgba(255,255,255,0.15)",borderRadius:4,padding:"2px 8px" }}>ADMIN</div>}
+              <button onClick={() => supabase.auth.signOut()} style={{ fontSize:10,color:THEME.headerMuted,background:"none",border:"1px solid rgba(255,255,255,0.25)",borderRadius:4,padding:"2px 8px",cursor:"pointer",fontFamily:"inherit",letterSpacing:1,fontWeight:700 }}>
+                SIGN OUT
+              </button>
+            </div>
           </div>
           {activePlayers.some(p => p) && (
             <div className="hscroll" style={{ marginTop:8 }}>
@@ -464,6 +531,7 @@ export default function App() {
             activePlayers={activePlayers}
             selectedPlayer={selectedPlayer}
             setSelectedPlayer={setSelectedPlayer}
+            myPlayerIndex={myPlayerIndex}
             groupFilter={groupFilter}
             setGroupFilter={setGroupFilter}
             predictions={predictions}
@@ -516,6 +584,7 @@ export default function App() {
         {tab === "Setup" && isAdmin && (
           <SetupTab
             activePlayers={activePlayers}
+            playersMeta={playersMeta}
             lockDate={lockDate}
             resultsLocked={resultsLocked}
             onReload={() => loadAllData().then(applyData).catch(console.error)}

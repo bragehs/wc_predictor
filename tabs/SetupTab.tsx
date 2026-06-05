@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import type { BonusQuestion, KnockoutRoundMeta, GroupMatch } from "../types/index";
+import type { PlayerMeta } from "../db";
 import { useTournament } from "../context/TournamentContext";
 import { THEME } from "../theme";
 import STitle from "../components/STitle";
@@ -8,11 +9,12 @@ import {
   saveMatchFixture, deleteMatchFixture,
   saveBonusQuestion, deleteBonusQuestion,
   savePlayer, deletePlayer,
-  saveSetting,
+  saveSetting, savePlayerEmail, approvePlayer,
 } from "../db";
 
 interface SetupTabProps {
   activePlayers: string[];
+  playersMeta: PlayerMeta[];
   lockDate: Date | null;
   resultsLocked: boolean;
   onReload: () => Promise<void>;
@@ -67,7 +69,7 @@ const rowStyle: React.CSSProperties = {
   fontSize: 13,
 };
 
-export default function SetupTab({ activePlayers, lockDate, resultsLocked, onReload }: SetupTabProps) {
+export default function SetupTab({ activePlayers, playersMeta, lockDate, resultsLocked, onReload }: SetupTabProps) {
   const { groups, groupMatches, bonusQuestions, knockoutRounds } = useTournament();
 
   // ── Players ──────────────────────────────────────────────────────────────
@@ -84,6 +86,20 @@ export default function SetupTab({ activePlayers, lockDate, resultsLocked, onRel
   async function handleDeletePlayer(name: string) {
     if (!confirm(`Remove player "${name}"? Their predictions will remain in the DB.`)) return;
     await deletePlayer(name).catch(console.error);
+    onReload();
+  }
+
+  // ── Player emails ─────────────────────────────────────────────────────────
+  const [emailDrafts, setEmailDrafts] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const drafts: Record<string, string> = {};
+    playersMeta.forEach(p => { drafts[p.name] = p.email ?? ""; });
+    setEmailDrafts(drafts);
+  }, [playersMeta]);
+
+  async function handleSaveEmail(name: string) {
+    await savePlayerEmail(name, emailDrafts[name] ?? "").catch(console.error);
     onReload();
   }
 
@@ -208,6 +224,51 @@ export default function SetupTab({ activePlayers, lockDate, resultsLocked, onRel
             onKeyDown={e => e.key === "Enter" && handleAddPlayer()} />
           <button style={btnStyle(THEME.green)} onClick={handleAddPlayer}>Add</button>
         </div>
+      </div>
+
+      {/* Pending approvals */}
+      {playersMeta.some(p => !p.approved) && (
+        <div style={{ ...sectionStyle, borderColor: THEME.goldBorder }}>
+          <div style={{ ...labelStyle, color: THEME.gold }}>Pending approval</div>
+          {playersMeta.filter(p => !p.approved).map(p => (
+            <div key={p.name} style={rowStyle}>
+              <div style={{ flex: 1 }}>
+                <span style={{ fontWeight: 600, color: THEME.textPrimary, fontSize: 13 }}>{p.name}</span>
+                {p.email && <span style={{ fontSize: 11, color: THEME.textMuted, marginLeft: 8 }}>{p.email}</span>}
+              </div>
+              <button style={{ ...btnStyle(THEME.green), marginRight: 4 }} onClick={async () => {
+                await approvePlayer(p.name).catch(console.error);
+                onReload();
+              }}>Approve</button>
+              <button style={btnStyle(THEME.red)} onClick={async () => {
+                if (!confirm(`Reject "${p.name}"?`)) return;
+                await deletePlayer(p.name).catch(console.error);
+                onReload();
+              }}>Reject</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Player emails */}
+      <div style={sectionStyle}>
+        <div style={labelStyle}>Player emails (for magic link login)</div>
+        {playersMeta.map(p => (
+          <div key={p.name} style={{ ...rowStyle, gap: 8 }}>
+            <span style={{ minWidth: 80, color: THEME.textPrimary, fontWeight: 600, fontSize: 13 }}>{p.name}</span>
+            <input
+              style={{ ...inputStyle, flex: 1, fontSize: 12 }}
+              type="email"
+              placeholder="email@example.com"
+              value={emailDrafts[p.name] ?? ""}
+              onChange={e => setEmailDrafts(prev => ({ ...prev, [p.name]: e.target.value }))}
+              onKeyDown={e => e.key === "Enter" && handleSaveEmail(p.name)}
+            />
+            <button style={{ ...btnStyle(THEME.blue), color: "#fff" }} onClick={() => handleSaveEmail(p.name)}>
+              Save
+            </button>
+          </div>
+        ))}
       </div>
 
       {/* Teams & Groups */}

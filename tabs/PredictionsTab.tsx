@@ -12,6 +12,7 @@ interface PredictionsTabProps {
   activePlayers: string[];
   selectedPlayer: number;
   setSelectedPlayer: (i: number) => void;
+  myPlayerIndex: number;
   groupFilter: string;
   setGroupFilter: (g: string) => void;
   predictions: AllPredictions;
@@ -27,7 +28,7 @@ interface PredictionsTabProps {
 }
 
 export default function PredictionsTab({
-  activePlayers, selectedPlayer, setSelectedPlayer,
+  activePlayers, selectedPlayer, setSelectedPlayer, myPlayerIndex,
   groupFilter, setGroupFilter,
   predictions, results,
   setPred, setTableOrder, setBonusPred, setThirdPlacesPred, setKnockoutWinnerPred,
@@ -35,7 +36,9 @@ export default function PredictionsTab({
 }: PredictionsTabProps) {
   const { groups, groupMatches, bonusQuestions } = useTournament();
   const flag = useFlag();
-  const pi = selectedPlayer;
+  // Before lock, non-admins are pinned to their own player; after lock everyone can browse
+  const showSwitcher = isAdmin || isLocked;
+  const pi = showSwitcher ? selectedPlayer : myPlayerIndex;
   const isEditable = isAdmin || !isLocked;
 
   return (
@@ -54,14 +57,16 @@ export default function PredictionsTab({
         </div>
       )}
 
-      <div className="hscroll" style={{ marginBottom:12 }}>
-        {activePlayers.map((p, i) => p ? (
-          <button key={i} className="grp-btn" onClick={() => setSelectedPlayer(i)}
-            style={{ background:selectedPlayer===i?COLORS[i]:THEME.bgButton,color:selectedPlayer===i?"#000":THEME.textSecondary,border:`1px solid ${selectedPlayer===i?COLORS[i]:THEME.borderCard}`,flexShrink:0 }}>
-            {p || `P${i + 1}`}
-          </button>
-        ) : null)}
-      </div>
+      {showSwitcher && (
+        <div className="hscroll" style={{ marginBottom:12 }}>
+          {activePlayers.map((p, i) => p ? (
+            <button key={i} className="grp-btn" onClick={() => setSelectedPlayer(i)}
+              style={{ background:pi===i?COLORS[i]:THEME.bgButton,color:pi===i?"#000":THEME.textSecondary,border:`1px solid ${pi===i?COLORS[i]:THEME.borderCard}`,flexShrink:0 }}>
+              {p || `P${i + 1}`}
+            </button>
+          ) : null)}
+        </div>
+      )}
 
       <div style={{ display:"flex",gap:5,flexWrap:"wrap",marginBottom:12 }}>
         {Object.keys(groups).map(g => (
@@ -121,7 +126,9 @@ export default function PredictionsTab({
                     })}
                   </div>
                   <span style={{ fontSize:12,flex:1,fontWeight:600,whiteSpace:"nowrap",color:THEME.textPrimary }}>{flag(m.away)} {m.away}</span>
-                  {actual != null && <PointsBadge pts={pointsForOutcome(mp, actual)}/>}
+                  <div style={{ width:28,flexShrink:0 }}>
+                    {actual != null && <PointsBadge pts={pointsForOutcome(mp, actual)}/>}
+                  </div>
                 </div>
               );
             })}
