@@ -38,9 +38,9 @@ export default function StandingsTab({ activePlayers, scores, calcScoreBreakdown
               <tr>
                 <th style={th({ textAlign:"left",width:32 })}>#</th>
                 <th style={th({ textAlign:"left" })}>Player</th>
-                <th style={th({ textAlign:"right" })}>Outcomes</th>
-                <th style={th({ textAlign:"right" })}>Table</th>
-                <th style={th({ textAlign:"right" })}>KO</th>
+                <th style={th({ textAlign:"right" })}>Enkeltkamper</th>
+                <th style={th({ textAlign:"right" })}>Tabellplassering</th>
+                <th style={th({ textAlign:"right" })}>Lag med seg i sluttspill</th>
                 <th style={th({ textAlign:"right" })}>Bonus</th>
                 <th style={th({ textAlign:"right", color:THEME.gold })}>Total</th>
               </tr>
