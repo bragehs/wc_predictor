@@ -16,7 +16,7 @@ export default function RulesTab() {
           {knockoutRounds.map(r => (
             <div key={r.id}><b style={{color:THEME.textPrimary}}>+{r.pts} pts</b> — {r.label}</div>
           ))}
-          <div><b style={{color:THEME.textPrimary}}>+{WinnerPoints} pts</b> — {"Winner"}</div>
+          <div><b style={{color:THEME.textPrimary}}>+{WinnerPoints} pts</b> — {"Vinner"}</div>
         </div>
         <div style={{ marginTop:6,paddingTop:6,borderTop:`1px solid ${THEME.borderMuted}` }}>
           {bonusQuestions.map(bq => (
