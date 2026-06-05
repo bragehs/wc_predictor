@@ -83,7 +83,8 @@ export async function loadAllData(): Promise<AppData> {
     id: string; round: string; home: string; away: string; date: string | null; group_id: string | null;
   }>)
     .filter(m => m.round === "group")
-    .map(m => ({ id: m.id, group: m.group_id ?? "", home: m.home, away: m.away, date: m.date ?? "" }));
+    .map(m => ({ id: m.id, group: m.group_id ?? "", home: m.home, away: m.away, date: m.date ?? "" }))
+    .sort((a, b) => a.date.localeCompare(b.date));
 
   const bonusQuestions: BonusQuestion[] = ((bonusQRows ?? []) as Array<{
     question_id: string; label: string; pts: number;

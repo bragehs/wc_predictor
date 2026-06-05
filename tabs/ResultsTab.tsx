@@ -2,8 +2,9 @@ import type { AllResults, AllPredictions, TiebreakerData } from "../types/index"
 import { useTournament, useFlag } from "../context/TournamentContext";
 import { THEME } from "../theme";
 import {
-  getQualifiers, buildFirstKOBracket, getKnockoutMatchup,
+  getQualifiers, buildFirstKOBracket, getKnockoutMatchup, FINAL_MATCH_ID,
 } from "../bracketLogic";
+import { WinnerPoints } from "../config";
 import STitle from "../components/STitle";
 import GroupTable from "../components/GroupTable";
 import TiebreakerSection from "../components/TiebreakerSection";
@@ -171,6 +172,21 @@ export default function ResultsTab({
               })}
             </div>
           ))}
+          {(() => {
+            const winner = koWinners[FINAL_MATCH_ID] ?? null;
+            return (
+              <div style={{ marginBottom:20 }}>
+                <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:8 }}>
+                  <div style={{ fontSize:13,fontWeight:700,color:THEME.blue,letterSpacing:1,textTransform:"uppercase" }}>Tournament Winner</div>
+                  <div style={{ fontSize:10,background:THEME.blueBg,color:THEME.blue,border:`1px solid ${THEME.blueBorder}`,borderRadius:4,padding:"1px 7px" }}>+{WinnerPoints} pts</div>
+                </div>
+                {winner
+                  ? <div style={{ padding:"10px 14px",background:THEME.bgButton,border:`1px solid ${THEME.blue}`,borderRadius:8,fontSize:14,fontWeight:700,color:THEME.blue }}>🏆 {flag(winner)} {winner}</div>
+                  : <div style={{ fontSize:12,color:THEME.textFaint }}>Set the final match winner above.</div>
+                }
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>

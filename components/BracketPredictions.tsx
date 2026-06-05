@@ -1,7 +1,8 @@
-import type { AllPredictions, AllResults } from "../types/index";
+import type { AllPredictions, AllResults, TiebreakerData } from "../types/index";
 import { useTournament, useFlag } from "../context/TournamentContext";
 import { THEME } from "../theme";
-import { buildFirstKOBracket, getKnockoutMatchup, THIRD_PLACE_COUNT } from "../bracketLogic";
+import { buildFirstKOBracket, getKnockoutMatchup, getQualifiers, THIRD_PLACE_COUNT, QUALIFICATION_ROUND_ID, FINAL_MATCH_ID } from "../bracketLogic";
+import { WinnerPoints } from "../config";
 import { buildPredQualifiers } from "../helpers";
 
 interface BracketPredictionsProps {
@@ -13,6 +14,8 @@ interface BracketPredictionsProps {
   isEditable: boolean;
 }
 
+const isPlaceholder = (t: string) => t === "TBD" || t.startsWith("W(") || t.startsWith("3rd");
+
 export default function BracketPredictions({
   pi, predictions, results, setThirdPlacesPred, setKnockoutWinnerPred, isEditable,
 }: BracketPredictionsProps) {
@@ -21,13 +24,18 @@ export default function BracketPredictions({
   const pred       = predictions[pi] ?? {};
   const thirdPicks = (pred.thirdPlaces as string[] | undefined) ?? [];
   const koWinners  = (pred.knockoutWinners as Record<string, string | null> | undefined) ?? {};
-  const actKoW     = results.knockoutWinners ?? {};
+  const actKoW     = results.knockoutWinners as Record<string, string | null> | undefined ?? {};
 
   const predQ = buildPredQualifiers(pi, predictions);
   const thirds = Object.entries(groups).map(([g]) => ({
     group: g, team: predQ[g]?.third ?? `3rd ${g}`,
   }));
   const firstKO = buildFirstKOBracket(predQ, thirdPicks.length === THIRD_PLACE_COUNT ? thirdPicks : null);
+  const actualFirstKO = buildFirstKOBracket(
+    getQualifiers(results),
+    null,
+    results.tiebreakers as Record<string, TiebreakerData> | undefined,
+  );
 
   const toggleThird = (g: string) => {
     if (!isEditable) return;
@@ -42,6 +50,26 @@ export default function BracketPredictions({
     if (!isEditable) return;
     setKnockoutWinnerPred(pi, matchId, koWinners[matchId] === team ? null : team);
   };
+
+  function roundTeamCount(roundIdx: number): { correct: number; total: number; hasResults: boolean } {
+    const round = knockoutRounds[roundIdx];
+    const total = round.matchIds.length * 2;
+
+    if (round.id === QUALIFICATION_ROUND_ID || roundIdx === 0) {
+      // Teams entering R32 come from group qualifiers, not KO match winners
+      const myTeams    = new Set(firstKO.flatMap(m => [m.home, m.away]).filter(t => !isPlaceholder(t)));
+      const actualTeams = new Set(actualFirstKO.flatMap(m => [m.home, m.away]).filter(t => !isPlaceholder(t)));
+      const correct = [...myTeams].filter(t => actualTeams.has(t)).length;
+      return { correct, total, hasResults: actualTeams.size > 0 };
+    }
+
+    // Teams in round k are the winners of round k-1
+    const prevMatchIds = knockoutRounds[roundIdx - 1].matchIds;
+    const myTeams     = new Set(prevMatchIds.map(id => koWinners[id]).filter((t): t is string => !!t));
+    const actualTeams = new Set(prevMatchIds.map(id => actKoW[id]).filter((t): t is string => !!t));
+    const correct = [...myTeams].filter(t => actualTeams.has(t)).length;
+    return { correct, total, hasResults: actualTeams.size > 0 };
+  }
 
   return (
     <div>
@@ -74,48 +102,68 @@ export default function BracketPredictions({
         )}
       </div>
 
-      {knockoutRounds.map(round => (
-        <div key={round.id} style={{ marginBottom:20 }}>
-          <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:8 }}>
-            <div style={{ fontSize:13,fontWeight:700,color:THEME.gold,letterSpacing:1,textTransform:"uppercase" }}>{round.label}</div>
-            <div style={{ fontSize:12,background:THEME.goldBg,color:THEME.gold,border:`1px solid ${THEME.goldBorder}`,borderRadius:4,padding:"2px 8px",fontWeight:700 }}>+{round.pts} pts</div>
-          </div>
-          {round.matchIds.map(mid => {
-            const { home, away } = getKnockoutMatchup(mid, firstKO, koWinners);
-            const winner  = koWinners[mid] ?? null;
-            const actual  = (actKoW as Record<string, string | null>)[mid];
-            const correct = actual && winner && winner === actual;
-            const wrong   = actual && winner && winner !== actual;
-            const bothKnown = !home.startsWith("W(") && home !== "TBD" && !away.startsWith("W(") && away !== "TBD";
-            return (
-              <div key={mid} style={{ marginBottom:5 }}>
-                <div style={{ display:"flex",alignItems:"center",gap:5 }}>
-                  <span style={{ fontSize:11,color:THEME.textFaint,minWidth:38,fontWeight:700 }}>{mid}</span>
-                  <button className="ko-team" onClick={() => bothKnown && pickKO(mid, home)}
-                    style={{ background:winner===home?THEME.gold:THEME.bgButton,border:`1px solid ${winner===home?THEME.gold:THEME.borderCard}`,color:winner===home?"#000":THEME.textSecondary,cursor:(bothKnown&&isEditable)?"pointer":"default",opacity:!bothKnown?0.5:1 }}>
-                    {flag(home)} {home}
-                  </button>
-                  <span style={{ color:THEME.textFaint,fontSize:12,fontWeight:700,flexShrink:0 }}>vs</span>
-                  <button className="ko-team" onClick={() => bothKnown && pickKO(mid, away)}
-                    style={{ background:winner===away?THEME.gold:THEME.bgButton,border:`1px solid ${winner===away?THEME.gold:THEME.borderCard}`,color:winner===away?"#000":THEME.textSecondary,cursor:(bothKnown&&isEditable)?"pointer":"default",opacity:!bothKnown?0.5:1 }}>
-                    {flag(away)} {away}
-                  </button>
-                  {actual && (
-                    <span style={{ fontSize:12,fontWeight:700,color:correct?THEME.green:wrong?THEME.red:THEME.textMuted,background:correct?THEME.greenBg:wrong?THEME.redBg:"#ffffff08",borderRadius:3,padding:"2px 7px",flexShrink:0 }}>
-                      {correct ? `+${round.pts}` : wrong ? "✗" : "?"}
-                    </span>
+      {knockoutRounds.map((round, roundIdx) => {
+        const { correct, total, hasResults } = roundTeamCount(roundIdx);
+        return (
+          <div key={round.id} style={{ marginBottom:20 }}>
+            <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:8 }}>
+              <div style={{ fontSize:13,fontWeight:700,color:THEME.gold,letterSpacing:1,textTransform:"uppercase" }}>{round.label}</div>
+              <div style={{ fontSize:12,background:THEME.goldBg,color:THEME.gold,border:`1px solid ${THEME.goldBorder}`,borderRadius:4,padding:"2px 8px",fontWeight:700 }}>+{round.pts} pts</div>
+              {hasResults && (
+                <div style={{ fontSize:12,fontWeight:700,color:correct===total?THEME.green:THEME.textMuted }}>
+                  {correct}/{total}
+                </div>
+              )}
+            </div>
+            {round.matchIds.map(mid => {
+              const { home, away } = getKnockoutMatchup(mid, firstKO, koWinners);
+              const winner    = koWinners[mid] ?? null;
+              const bothKnown = !isPlaceholder(home) && !isPlaceholder(away);
+              return (
+                <div key={mid} style={{ marginBottom:5 }}>
+                  <div style={{ display:"flex",alignItems:"center",gap:5 }}>
+                    <span style={{ fontSize:11,color:THEME.textFaint,minWidth:38,fontWeight:700 }}>{mid}</span>
+                    <button className="ko-team" onClick={() => bothKnown && pickKO(mid, home)}
+                      style={{ background:winner===home?THEME.gold:THEME.bgButton,border:`1px solid ${winner===home?THEME.gold:THEME.borderCard}`,color:winner===home?"#000":THEME.textSecondary,cursor:(bothKnown&&isEditable)?"pointer":"default",opacity:!bothKnown?0.5:1 }}>
+                      {flag(home)} {home}
+                    </button>
+                    <span style={{ color:THEME.textFaint,fontSize:12,fontWeight:700,flexShrink:0 }}>vs</span>
+                    <button className="ko-team" onClick={() => bothKnown && pickKO(mid, away)}
+                      style={{ background:winner===away?THEME.gold:THEME.bgButton,border:`1px solid ${winner===away?THEME.gold:THEME.borderCard}`,color:winner===away?"#000":THEME.textSecondary,cursor:(bothKnown&&isEditable)?"pointer":"default",opacity:!bothKnown?0.5:1 }}>
+                      {flag(away)} {away}
+                    </button>
+                  </div>
+                  {!bothKnown && (
+                    <div style={{ fontSize:11,color:THEME.textFaint,paddingLeft:44,marginTop:1 }}>
+                      Predict prior rounds first
+                    </div>
                   )}
                 </div>
-                {!bothKnown && (
-                  <div style={{ fontSize:11,color:THEME.textFaint,paddingLeft:44,marginTop:1 }}>
-                    Predict prior rounds first
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      ))}
+              );
+            })}
+          </div>
+        );
+      })}
+      {(() => {
+        const predWinner   = koWinners[FINAL_MATCH_ID] ?? null;
+        const actualWinner = actKoW[FINAL_MATCH_ID] ?? null;
+        const isCorrect    = predWinner && actualWinner && predWinner === actualWinner;
+        return (
+          <div style={{ marginBottom:20 }}>
+            <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:8 }}>
+              <div style={{ fontSize:13,fontWeight:700,color:THEME.gold,letterSpacing:1,textTransform:"uppercase" }}>Tournament Winner</div>
+              <div style={{ fontSize:12,background:THEME.goldBg,color:THEME.gold,border:`1px solid ${THEME.goldBorder}`,borderRadius:4,padding:"2px 8px",fontWeight:700 }}>+{WinnerPoints} pts</div>
+              {actualWinner && predWinner && (
+                <div style={{ fontSize:12,fontWeight:700,color:isCorrect?THEME.green:THEME.textMuted }}>{isCorrect?"1/1":"0/1"}</div>
+              )}
+            </div>
+            {predWinner
+              ? <div style={{ padding:"10px 14px",background:THEME.bgButton,border:`1px solid ${THEME.borderCard}`,borderRadius:8,fontSize:14,fontWeight:700,color:THEME.textPrimary }}>{flag(predWinner)} {predWinner}</div>
+              : <div style={{ fontSize:12,color:THEME.textFaint }}>Predict the final to set your winner.</div>
+            }
+          </div>
+        );
+      })()}
     </div>
   );
 }
