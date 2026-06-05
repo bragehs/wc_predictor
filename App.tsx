@@ -554,6 +554,7 @@ export default function App() {
             setKnockoutWinnerResult={setKnockoutWinnerResult}
             setTiebreaker={setTiebreaker}
             isLocked={isResultsLocked}
+            predLocked={isLocked}
             isAdmin={isAdmin}
             activePlayers={activePlayers}
             predictions={predictions}

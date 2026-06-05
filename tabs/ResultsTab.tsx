@@ -18,6 +18,7 @@ interface ResultsTabProps {
   setKnockoutWinnerResult: (matchId: string, team: string | null) => void;
   setTiebreaker: (group: string, type: string, team: string, val: number | undefined) => void;
   isLocked: boolean;
+  predLocked: boolean;
   isAdmin: boolean;
   activePlayers: string[];
   predictions: AllPredictions;
@@ -27,7 +28,7 @@ interface ResultsTabProps {
 export default function ResultsTab({
   groupFilter, setGroupFilter,
   results, setResult, setKnockoutWinnerResult, setTiebreaker,
-  isLocked, isAdmin, activePlayers, predictions, setBonusIsCorrect,
+  isLocked, predLocked, isAdmin, activePlayers, predictions, setBonusIsCorrect,
 }: ResultsTabProps) {
   const { groups, groupMatches, bonusQuestions, knockoutRounds } = useTournament();
   const flag = useFlag();
@@ -106,7 +107,7 @@ export default function ResultsTab({
                 <span style={{ fontSize:13,fontWeight:600,color:THEME.textPrimary }}>{bq.label}</span>
                 <span style={{ fontSize:10,background:THEME.blueBg,color:THEME.blue,border:`1px solid ${THEME.blueBorder}`,borderRadius:4,padding:"1px 7px" }}>+{bq.pts} pts</span>
               </div>
-              {activePlayers.map((playerName, pi) => {
+              {(predLocked || isAdmin) ? activePlayers.map((playerName, pi) => {
                 const answer = (predictions[pi]?.bonus as Record<string, string> | undefined)?.[bq.id];
                 const isCorrect = (predictions[pi]?.bonusCorrect as Record<string, boolean> | undefined)?.[bq.id] ?? false;
                 return (
@@ -134,7 +135,11 @@ export default function ResultsTab({
                     </button>
                   </div>
                 );
-              })}
+              }) : (
+                <div style={{ fontSize:12,color:THEME.textFaint,fontStyle:"italic",padding:"6px 0" }}>
+                  Answers hidden until predictions are locked.
+                </div>
+              )}
             </div>
           ))}
         </div>
