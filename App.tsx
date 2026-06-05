@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
-import type { MatchPrediction, TabName, AllPredictions, AllResults, MatchOutcome, BracketView, ScoreBreakdown, TiebreakerData } from "./types/index.ts";
+import type { MatchPrediction, TabName, AllPredictions, AllResults, MatchOutcome, ScoreBreakdown, TiebreakerData } from "./types/index.ts";
 import { SCORING, MAX_PLAYERS, COLORS, TABS, WinnerPoints } from "./config.ts";
 import { THEME } from "./theme.ts";
 import { calcGroupStandings, getQualifiers, buildFirstKOBracket, FINAL_MATCH_ID, QUALIFICATION_ROUND_ID, THIRD_PLACE_COUNT } from "./bracketLogic.ts";
@@ -23,7 +23,6 @@ import type { TournamentConfig } from "./context/TournamentContext.tsx";
 import RulesTab       from "./tabs/RulesTab.tsx";
 import PredictionsTab from "./tabs/PredictionsTab.tsx";
 import ResultsTab     from "./tabs/ResultsTab.tsx";
-import BracketTab     from "./tabs/BracketTab.tsx";
 import StandingsTab   from "./tabs/StandingsTab.tsx";
 import SetupTab       from "./tabs/SetupTab.tsx";
 
@@ -40,7 +39,6 @@ export default function App() {
   const [results, setResults]           = useState<AllResults>({});
   const [selectedPlayer, setSelectedPlayer] = useState(0);
   const [groupFilter, setGroupFilter]   = useState("A");
-  const [bracketView, setBracketView]   = useState<BracketView>("actual");
   const [loaded, setLoaded]             = useState(false);
   const [lockDate, setLockDate]         = useState<Date | null>(null);
   const [resultsLocked, setResultsLocked] = useState(false);
@@ -563,17 +561,7 @@ export default function App() {
           />
         )}
 
-        {tab === "Bracket" && (
-          <BracketTab
-            activePlayers={activePlayers}
-            predictions={predictions}
-            results={results}
-            bracketView={bracketView}
-            setBracketView={setBracketView}
-          />
-        )}
-
-        {tab === "Standings" && (
+{tab === "Standings" && (
           <StandingsTab
             activePlayers={activePlayers}
             scores={scores}

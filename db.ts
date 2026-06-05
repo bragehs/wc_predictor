@@ -45,7 +45,7 @@ export async function loadAllData(): Promise<AppData> {
     { data: tiebreakerRows },
   ] = await Promise.all([
     supabase.from("players").select("name, email, is_admin, approved"),
-    supabase.from("settings").select("key, value").eq("tournament_id", TOURNAMENT_ID),
+    supabase.from("settings").select("key, date, locked").eq("tournament_id", TOURNAMENT_ID),
     supabase.from("teams").select("name, flag, group_id, sort_order").eq("tournament_id", TOURNAMENT_ID).order("sort_order"),
     supabase.from("bonus_questions").select("question_id, label, pts, correct_answer").eq("tournament_id", TOURNAMENT_ID),
     supabase.from("knockout_rounds").select("id, label, pts, sort_order").eq("tournament_id", TOURNAMENT_ID).order("sort_order"),
@@ -62,12 +62,10 @@ export async function loadAllData(): Promise<AppData> {
   const playersMeta: PlayerMeta[] = playerRows2.map(r => ({ name: r.name, email: r.email ?? null, isAdmin: r.is_admin ?? false, approved: r.approved ?? false }));
   const playersList = playerRows2.filter(r => r.approved).map(r => r.name);
 
-  const sm = Object.fromEntries(
-    ((settingsRows ?? []) as Array<{ key: string; value: unknown }>).map(r => [r.key, r.value])
-  );
-  const ld = sm["predictions_lock_date"] as string | undefined;
-  const lockDate = ld && ld !== "null" ? new Date(ld) : null;
-  const resultsLocked = sm["results_locked"] === true;
+  const settingRows2 = (settingsRows ?? []) as Array<{ key: string; date: string | null; locked: boolean | null }>;
+  const lockDateStr = settingRows2.find(r => r.key === "predictions_lock_date")?.date ?? null;
+  const lockDate = lockDateStr ? new Date(lockDateStr) : null;
+  const resultsLocked = settingRows2.find(r => r.key === "results_locked")?.locked ?? false;
 
   // ── Build tournament config from DB rows ──────────────────────────────────
   const flags: Record<string, string> = {};
@@ -295,8 +293,11 @@ export async function deletePlayer(name: string): Promise<void> {
   await supabase.from("players").delete().eq("name", name);
 }
 
-export async function saveSetting(key: string, value: unknown): Promise<void> {
-  await supabase.from("settings").upsert({ tournament_id: TOURNAMENT_ID, key, value });
+export async function saveSettings(lockDate: string | null, resultsLocked: boolean): Promise<void> {
+  await Promise.all([
+    supabase.from("settings").upsert({ tournament_id: TOURNAMENT_ID, key: "predictions_lock_date", date: lockDate, locked: null }),
+    supabase.from("settings").upsert({ tournament_id: TOURNAMENT_ID, key: "results_locked", date: null, locked: resultsLocked }),
+  ]);
 }
 
 export async function savePlayerEmail(name: string, email: string): Promise<void> {

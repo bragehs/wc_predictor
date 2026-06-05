@@ -9,7 +9,7 @@ import {
   saveMatchFixture, deleteMatchFixture,
   saveBonusQuestion, deleteBonusQuestion,
   savePlayer, deletePlayer,
-  saveSetting, savePlayerEmail, approvePlayer,
+  saveSettings, savePlayerEmail, approvePlayer,
 } from "../db";
 
 interface SetupTabProps {
@@ -178,10 +178,7 @@ export default function SetupTab({ activePlayers, playersMeta, lockDate, results
   async function handleSaveSettings() {
     setSaving(true);
     const dateVal = lockDateStr ? new Date(lockDateStr).toISOString() : null;
-    await Promise.all([
-      saveSetting("predictions_lock_date", dateVal ?? "null"),
-      saveSetting("results_locked", locked),
-    ]).catch(console.error);
+    await saveSettings(dateVal, locked).catch(console.error);
     await onReload();
     setSaving(false);
   }

@@ -27,6 +27,6 @@ export const COLORS: string[] = [
 
 export const WinnerPoints = 30;
 
-export const TABS: TabName[] = ["Rules", "Predictions", "Results", "Bracket", "Standings"];
+export const TABS: TabName[] = ["Rules", "Predictions", "Results", "Standings"];
 
 export const STORAGE_KEY = "wc2026_v4";

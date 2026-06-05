@@ -47,7 +47,7 @@ export default function PredictionsTab({
 
       {isLocked && (
         <div style={{ background:THEME.bgCard,border:`1px solid ${THEME.blueBorder}`,borderRadius:8,padding:"10px 14px",marginBottom:14,fontSize:13,color:THEME.blue,fontFamily:"'Barlow',Arial" }}>
-          🔒 Predictions locked{lockDate ? ` since ${lockDate.toLocaleDateString("no-NO", {day:"numeric",month:"long",year:"numeric"})}` : ""}. Contact the organizer to change.
+          🔒 Predictions locked{lockDate ? ` since ${lockDate.toLocaleDateString("no-NO", {day:"numeric",month:"long",year:"numeric"})}` : ""}
         </div>
       )}
 

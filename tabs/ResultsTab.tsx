@@ -39,7 +39,7 @@ export default function ResultsTab({
       <STitle>Enter Real Results</STitle>
       {isLocked && (
         <div style={{ background:THEME.bgCard,border:`1px solid ${THEME.blueBorder}`,borderRadius:8,padding:"10px 14px",marginBottom:14,fontSize:13,color:THEME.blue,fontFamily:"'Barlow',Arial" }}>
-          🔒 Results are currently locked. Contact the organizer to make changes.
+          🔒 Results are currently locked.
         </div>
       )}
       {!isLocked && <div style={{ fontSize:12,color:THEME.textMuted,marginBottom:12 }}>Enter actual scores and knockout results as the tournament progresses.</div>}
