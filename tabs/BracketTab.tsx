@@ -1,4 +1,4 @@
-import type { AllPredictions, AllResults, BracketView } from "../types/index";
+import type { AllPredictions, AllResults, BracketView, TiebreakerData } from "../types/index";
 import { COLORS } from "../config";
 import { THEME } from "../theme";
 import {
@@ -33,8 +33,9 @@ export default function BracketTab({
   const thirdPicks = isActual
     ? null
     : (predictions[bracketView as number]?.thirdPlaces as string[] | undefined) ?? null;
-  const firstKO   = buildFirstKOBracket(qualifiers, thirdPicks?.length === THIRD_PLACE_COUNT ? thirdPicks : null);
-  const best8 = THIRD_PLACE_COUNT > 0 ? getBestThirdPlaces(qualifiers) : [];
+  const actualTiebreakers = isActual ? results.tiebreakers as Record<string, TiebreakerData> | undefined : undefined;
+  const firstKO   = buildFirstKOBracket(qualifiers, thirdPicks?.length === THIRD_PLACE_COUNT ? thirdPicks : null, actualTiebreakers);
+  const best8 = THIRD_PLACE_COUNT > 0 ? getBestThirdPlaces(qualifiers, actualTiebreakers) : [];
 
   return (
     <div>

@@ -1,4 +1,4 @@
-import type { AllResults, AllPredictions } from "../types/index";
+import type { AllResults, AllPredictions, TiebreakerData } from "../types/index";
 import { useTournament, useFlag } from "../context/TournamentContext";
 import { THEME } from "../theme";
 import {
@@ -7,6 +7,7 @@ import {
 import STitle from "../components/STitle";
 import GroupTable from "../components/GroupTable";
 import TiebreakerSection from "../components/TiebreakerSection";
+import ThirdPlaceTiebreakerSection from "../components/ThirdPlaceTiebreakerSection";
 
 interface ResultsTabProps {
   groupFilter: string;
@@ -30,7 +31,7 @@ export default function ResultsTab({
   const { groups, groupMatches, bonusQuestions, knockoutRounds } = useTournament();
   const flag = useFlag();
   const actualQ   = getQualifiers(results);
-  const firstKOBracket = buildFirstKOBracket(actualQ);
+  const firstKOBracket = buildFirstKOBracket(actualQ, null, results.tiebreakers as Record<string, TiebreakerData> | undefined);
   const koWinners = (results.knockoutWinners ?? {}) as Record<string, string | null>;
 
   return (
@@ -62,7 +63,7 @@ export default function ResultsTab({
 
       {!["BONUS", "KNOCKOUT", "BRACKET"].includes(groupFilter) && (
         <>
-          {groupMatches.filter(m => m.group === groupFilter).map(m => {
+          {groupMatches.filter(m => m.group === groupFilter).sort((a, b) => a.date.localeCompare(b.date)).map(m => {
             const actual = results[m.id] as { home?: string; away?: string } | undefined ?? {};
             return (
               <div key={m.id} className="match-row">
@@ -140,6 +141,7 @@ export default function ResultsTab({
 
       {groupFilter === "KNOCKOUT" && (
         <div>
+          <ThirdPlaceTiebreakerSection results={results} setTiebreaker={setTiebreaker} isLocked={isLocked}/>
           {knockoutRounds.map(round => (
             <div key={round.id} style={{ marginBottom:20 }}>
               <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:8 }}>

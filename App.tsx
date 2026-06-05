@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import type { MatchPrediction, TabName, AllPredictions, AllResults, MatchOutcome, BracketView, ScoreBreakdown } from "./types/index.ts";
+import type { MatchPrediction, TabName, AllPredictions, AllResults, MatchOutcome, BracketView, ScoreBreakdown, TiebreakerData } from "./types/index.ts";
 import { SCORING, MAX_PLAYERS, COLORS, TABS, WinnerPoints } from "./config.ts";
 import { THEME } from "./theme.ts";
 import { calcGroupStandings, getQualifiers, buildFirstKOBracket, FINAL_MATCH_ID, QUALIFICATION_ROUND_ID, THIRD_PLACE_COUNT } from "./bracketLogic.ts";
@@ -290,7 +290,7 @@ export default function App() {
         const thirdPlaceReady    = THIRD_PLACE_COUNT === 0 || predThirdPlaces?.length === THIRD_PLACE_COUNT;
         if (allGroupsPredicted && allGroupsComplete && thirdPlaceReady) {
           const actualQualTeams = new Set(
-            buildFirstKOBracket(getQualifiers(results)).flatMap(m => [m.home, m.away]).filter(t => t !== "3rd TBD")
+            buildFirstKOBracket(getQualifiers(results), null, results.tiebreakers as Record<string, TiebreakerData> | undefined).flatMap(m => [m.home, m.away]).filter(t => t !== "3rd TBD")
           );
           buildPredFirstKOBracket(pi, predictions).forEach(m => {
             if (m.home !== "3rd TBD" && actualQualTeams.has(m.home)) score += qualRound.pts;
@@ -357,7 +357,7 @@ export default function App() {
           const thirdPlaceReady    = THIRD_PLACE_COUNT === 0 || predThirdPlaces?.length === THIRD_PLACE_COUNT;
           if (allGroupsPredicted && allGroupsComplete && thirdPlaceReady) {
             const actualQualTeams = new Set(
-              buildFirstKOBracket(getQualifiers(results)).flatMap(m => [m.home, m.away]).filter(t => t !== "3rd TBD")
+              buildFirstKOBracket(getQualifiers(results), null, results.tiebreakers as Record<string, TiebreakerData> | undefined).flatMap(m => [m.home, m.away]).filter(t => t !== "3rd TBD")
             );
             buildPredFirstKOBracket(pi, predictions).forEach(m => {
               if (m.home !== "3rd TBD" && actualQualTeams.has(m.home)) knockout[QUALIFICATION_ROUND_ID!] += qualRound.pts;

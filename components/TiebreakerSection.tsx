@@ -40,11 +40,11 @@ export default function TiebreakerSection({ group, results, setTiebreaker, isLoc
       </div>
       <div style={{ display:"grid",gridTemplateColumns:"1fr 80px 80px",gap:6,alignItems:"center" }}>
         <div style={{ fontSize:9,color:THEME.textFaint,textTransform:"uppercase",letterSpacing:1 }}>Team</div>
-        <div style={{ fontSize:9,color:THEME.textFaint,textTransform:"uppercase",letterSpacing:1,textAlign:"center" }}>Yellow</div>
+        <div style={{ fontSize:9,color:THEME.textFaint,textTransform:"uppercase",letterSpacing:1,textAlign:"center" }}>Conduct</div>
         <div style={{ fontSize:9,color:THEME.textFaint,textTransform:"uppercase",letterSpacing:1,textAlign:"center" }}>FIFA rank</div>
         {tiedTeams.flatMap(team => [
           <div key={team} style={{ fontSize:12,fontWeight:600,color:THEME.textPrimary }}>{flag(team)} {team}</div>,
-          <input key={team + "_yc"} type="number" min={0} style={{ ...inputStyle, opacity: isLocked ? 0.5 : 1 }}
+          <input key={team + "_cs"} type="number" min={0} style={{ ...inputStyle, opacity: isLocked ? 0.5 : 1 }}
             value={tb.yellowCards?.[team] ?? ""}
             onChange={e => !isLocked && setTiebreaker(group, "yellowCards", team, e.target.value === "" ? undefined : parseInt(e.target.value))}
             readOnly={isLocked}

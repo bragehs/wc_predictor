@@ -1,4 +1,4 @@
-import type { R32Match, Qualifiers, ThirdPlaceEntry, GroupStandingRow } from "../../types/index";
+import type { R32Match, Qualifiers, ThirdPlaceEntry, GroupStandingRow, TiebreakerData } from "../../types/index";
 import { RAW_SCENARIOS } from "./third_place_combinations";
 
 // ── Tournament contract ───────────────────────────────────────────────────────
@@ -47,13 +47,18 @@ export function lookupScenario(qualifyingGroups: string[]): Record<string, strin
   return out;
 }
 
-export function getBestThirdPlaces(qualifiers: Qualifiers): ThirdPlaceEntry[] {
+export function getBestThirdPlaces(qualifiers: Qualifiers, tiebreakers?: Record<string, TiebreakerData>): ThirdPlaceEntry[] {
+  const tb = tiebreakers?.["3RD"] ?? {};
   return Object.entries(qualifiers)
     .map(([g, q]) => {
       const row = q.row as GroupStandingRow | undefined;
       return { group: g, team: q.third, pts: row?.pts ?? 0, gd: row?.gd ?? 0, gf: row?.gf ?? 0 };
     })
-    .sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf)
+    .sort((a, b) =>
+      b.pts - a.pts || b.gd - a.gd || b.gf - a.gf ||
+      ((tb.yellowCards?.[a.team] ?? 999) - (tb.yellowCards?.[b.team] ?? 999)) ||
+      ((tb.fifaRankings?.[a.team] ?? 999) - (tb.fifaRankings?.[b.team] ?? 999))
+    )
     .slice(0, 8);
 }
 
@@ -71,8 +76,8 @@ export function getKnockoutMatchup(
   };
 }
 
-export function buildFirstKOBracket(qualifiers: Qualifiers, qualifyingGroups?: string[] | null): R32Match[] {
-  const q8 = qualifyingGroups ?? getBestThirdPlaces(qualifiers).map(t => t.group);
+export function buildFirstKOBracket(qualifiers: Qualifiers, qualifyingGroups?: string[] | null, tiebreakers?: Record<string, TiebreakerData>): R32Match[] {
+  const q8 = qualifyingGroups ?? getBestThirdPlaces(qualifiers, tiebreakers).map(t => t.group);
   const scenario = q8.length === 8 ? lookupScenario(q8) : null;
 
   const res1 = (g: string) => qualifiers[g]?.first  ?? `${g}1`;
