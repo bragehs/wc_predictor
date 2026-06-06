@@ -1,5 +1,6 @@
 import type {
   MatchPrediction,
+  MatchResult,
   AllPredictions,
   AllResults,
   OutcomeStandingRow,
@@ -16,24 +17,22 @@ import {
 
 export function groupIsComplete(g: string, results: AllResults): boolean {
   return GROUP_MATCHES.filter(m => m.group === g).every(m => {
-    const r = results[m.id] as { home?: unknown; away?: unknown } | undefined;
+    const r = results.matchResults[m.id];
     return r && r.home !== "" && r.away !== "" && r.home != null && r.away != null;
   });
 }
 
 export function playerGroupIsComplete(pi: number, g: string, predictions: AllPredictions): boolean {
-  const pred = predictions[pi] ?? {};
+  const pred = predictions[pi];
   return GROUP_MATCHES.filter(m => m.group === g).every(m => {
-    const mp = pred[m.id] as MatchPrediction | undefined;
-    return mp?.outcome != null;
+    return pred?.matchPredictions[m.id]?.outcome != null;
   });
 }
 
-export function pointsForOutcome(pred: MatchPrediction | undefined, actual: unknown): number {
+export function pointsForOutcome(pred: MatchPrediction | undefined, actual: MatchResult | undefined): number {
   if (!pred?.outcome) return 0;
-  const r = actual as { home?: unknown; away?: unknown } | undefined;
-  const h = parseInt(String(r?.home ?? ""));
-  const a = parseInt(String(r?.away ?? ""));
+  const h = parseInt(String(actual?.home ?? ""));
+  const a = parseInt(String(actual?.away ?? ""));
   if (isNaN(h) || isNaN(a)) return 0;
   const actualOutcome = h > a ? "H" : h < a ? "A" : "D";
   return pred.outcome === actualOutcome ? SCORING.correctOutcome : 0;
@@ -72,13 +71,12 @@ export function getPredEffectiveOrder(
   g: string,
   predictions: AllPredictions,
 ): OutcomeStandingRow[] {
-  const preds = predictions[pi] ?? {};
-  const tableOrder = preds.tableOrder as Record<string, string[]> | undefined;
+  const preds = predictions[pi];
+  const tableOrder = preds?.tableOrder;
   const outcomes: Record<string, string | null> = Object.fromEntries(
-    GROUP_MATCHES.filter(m => m.group === g).map(m => {
-      const mp = preds[m.id] as MatchPrediction | undefined;
-      return [m.id, mp?.outcome ?? null];
-    })
+    GROUP_MATCHES.filter(m => m.group === g).map(m => [
+      m.id, preds?.matchPredictions[m.id]?.outcome ?? null,
+    ])
   );
   const standings = calcGroupStandingsFromOutcomes(g, GROUPS[g], outcomes);
   return applyManualOrder(standings, tableOrder?.[g]);
@@ -100,6 +98,6 @@ export function buildPredQualifiers(pi: number, predictions: AllPredictions): Qu
 
 export function buildPredFirstKOBracket(pi: number, predictions: AllPredictions) {
   const q = buildPredQualifiers(pi, predictions);
-  const thirdPlaces = predictions[pi]?.thirdPlaces as string[] | undefined;
+  const thirdPlaces = predictions[pi]?.thirdPlaces;
   return buildFirstKOBracket(q, thirdPlaces?.length === THIRD_PLACE_COUNT ? thirdPlaces : null);
 }

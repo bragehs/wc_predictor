@@ -1,4 +1,4 @@
-import type { AllResults, AllPredictions, TiebreakerData } from "../types/index";
+import type { AllResults, AllPredictions } from "../types/index";
 import { useTournament, useFlag } from "../context/TournamentContext";
 import { THEME } from "../theme";
 import {
@@ -33,8 +33,8 @@ export default function ResultsTab({
   const { groups, groupMatches, bonusQuestions, knockoutRounds } = useTournament();
   const flag = useFlag();
   const actualQ   = getQualifiers(results);
-  const firstKOBracket = buildFirstKOBracket(actualQ, null, results.tiebreakers as Record<string, TiebreakerData> | undefined);
-  const koWinners = (results.knockoutWinners ?? {}) as Record<string, string | null>;
+  const firstKOBracket = buildFirstKOBracket(actualQ, null, results.tiebreakers);
+  const koWinners = results.knockoutWinners ?? {};
 
   return (
     <div>
@@ -66,7 +66,7 @@ export default function ResultsTab({
       {!["BONUS", "KNOCKOUT", "BRACKET"].includes(groupFilter) && (
         <>
           {groupMatches.filter(m => m.group === groupFilter).map(m => {
-            const actual = results[m.id] as { home?: string; away?: string } | undefined ?? {};
+            const actual = results.matchResults[m.id] ?? {};
             return (
               <div key={m.id} className="match-row">
                 <span style={{ fontSize:10,color:THEME.textFaint,minWidth:42,flexShrink:0 }}>{m.date}</span>
@@ -108,8 +108,8 @@ export default function ResultsTab({
                 <span style={{ fontSize:10,background:THEME.blueBg,color:THEME.blue,border:`1px solid ${THEME.blueBorder}`,borderRadius:4,padding:"1px 7px" }}>+{bq.pts} pts</span>
               </div>
               {(predLocked || isAdmin) ? activePlayers.map((playerName, pi) => {
-                const answer = (predictions[pi]?.bonus as Record<string, string> | undefined)?.[bq.id];
-                const isCorrect = (predictions[pi]?.bonusCorrect as Record<string, boolean> | undefined)?.[bq.id] ?? false;
+                const answer = predictions[pi]?.bonus?.[bq.id];
+                const isCorrect = predictions[pi]?.bonusCorrect?.[bq.id] ?? false;
                 return (
                   <div key={pi} style={{ display:"flex",alignItems:"center",gap:10,marginBottom:5,padding:"7px 10px",background:THEME.bgButton,borderRadius:6,border:`1px solid ${THEME.borderCard}` }}>
                     <span style={{ fontSize:12,fontWeight:700,color:THEME.textSecondary,minWidth:72,flexShrink:0 }}>{playerName}</span>

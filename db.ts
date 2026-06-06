@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import type { AllPredictions, AllResults, BonusQuestion, GroupMatch, KnockoutRoundMeta } from "./types/index";
+import type { AllPredictions, AllResults, BonusQuestion, GroupMatch, KnockoutRoundMeta, MatchPrediction, MatchOutcome } from "./types/index";
 import { ROUND_MATCH_IDS } from "./tournaments/active";
 
 const TOURNAMENT_ID = "wc_2026";
@@ -104,10 +104,10 @@ export async function loadAllData(): Promise<AppData> {
   // ── Build predictions ─────────────────────────────────────────────────────
   const predsObj: AllPredictions = {};
   playersList.forEach((playerName, idx) => {
-    const matchPreds: Record<string, { outcome: string }> = {};
+    const matchPreds: Record<string, MatchPrediction> = {};
     ((matchPredRows ?? []) as Array<{ player_name: string; match_id: string; outcome: string }>)
       .filter(r => r.player_name === playerName)
-      .forEach(r => { matchPreds[r.match_id] = { outcome: r.outcome }; });
+      .forEach(r => { matchPreds[r.match_id] = { outcome: r.outcome as MatchOutcome }; });
 
     const tableOrder: Record<string, string[]> = {};
     ((tablePredRows ?? []) as Array<{ player_name: string; group_id: string; position: number; team: string }>)
@@ -135,7 +135,7 @@ export async function loadAllData(): Promise<AppData> {
       .filter(r => r.player_name === playerName)
       .map(r => r.group_id);
 
-    predsObj[idx] = { ...matchPreds, tableOrder, bonus, bonusCorrect, knockoutWinners, thirdPlaces };
+    predsObj[idx] = { matchPredictions: matchPreds, tableOrder, bonus, bonusCorrect, knockoutWinners, thirdPlaces };
   });
 
   const results = buildResults(matchRows, tiebreakerRows, bonusQRows);
@@ -161,13 +161,13 @@ function buildResults(
   tiebreakerRows: unknown[] | null,
   bonusQRows: unknown[] | null
 ): AllResults {
-  const results: AllResults = {};
+  const results: AllResults = { matchResults: {} };
 
   ((matchRows ?? []) as Array<{ id: string; round: string; score_home: number | null; score_away: number | null; ko_winner: string | null }>)
     .forEach(m => {
       if (m.round === "group") {
         if (m.score_home !== null || m.score_away !== null) {
-          results[m.id] = {
+          results.matchResults[m.id] = {
             home: m.score_home?.toString() ?? "",
             away: m.score_away?.toString() ?? "",
           };
@@ -175,7 +175,7 @@ function buildResults(
       } else {
         if (m.ko_winner !== null) {
           if (!results.knockoutWinners) results.knockoutWinners = {};
-          (results.knockoutWinners as Record<string, string | null>)[m.id] = m.ko_winner;
+          results.knockoutWinners[m.id] = m.ko_winner;
         }
       }
     });

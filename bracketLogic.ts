@@ -4,7 +4,6 @@ import type {
   Qualifiers,
   KnockoutRoundMeta,
   AllResults,
-  TiebreakerData,
 } from "./types/index";
 import { GROUPS, GROUP_MATCHES } from "./tournamentStore";
 
@@ -30,7 +29,7 @@ export function calcGroupStandings(group: string, teams: string[], results: AllR
   teams.forEach(t => { pts[t]=0; gf[t]=0; ga[t]=0; w[t]=0; d[t]=0; l[t]=0; });
 
   GROUP_MATCHES.filter(m => m.group === group).forEach(m => {
-    const r = results[m.id] as { home?: string; away?: string } | undefined;
+    const r = results.matchResults[m.id];
     if (!r || r.home === "" || r.away === "") return;
     const h = parseInt(String(r.home ?? ""));
     const a = parseInt(String(r.away ?? ""));
@@ -42,7 +41,7 @@ export function calcGroupStandings(group: string, teams: string[], results: AllR
     else            { pts[m.home]++; pts[m.away]++; d[m.home]++; d[m.away]++; }
   });
 
-  const tb = (results.tiebreakers as Record<string, TiebreakerData> | undefined)?.[group] ?? {};
+  const tb = results.tiebreakers?.[group] ?? {};
   return teams
     .map(t => ({ team:t, pts:pts[t], gf:gf[t], ga:ga[t], gd:gf[t]-ga[t], w:w[t], d:d[t], l:l[t] }))
     .sort((a, b) =>

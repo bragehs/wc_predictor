@@ -1,4 +1,4 @@
-import type { AllPredictions, AllResults, MatchOutcome, MatchPrediction } from "../types/index";
+import type { AllPredictions, AllResults, MatchOutcome } from "../types/index";
 import { COLORS } from "../config";
 import { useTournament, useFlag } from "../context/TournamentContext";
 import { THEME } from "../theme";
@@ -86,13 +86,12 @@ export default function PredictionsTab({
       </div>
 
       {groups[groupFilter] !== undefined && (() => {
-        const pred = predictions[pi] ?? {};
-        const tableOrder = pred.tableOrder as Record<string, string[]> | undefined;
+        const pred = predictions[pi];
+        const tableOrder = pred?.tableOrder;
         const outcomes: Record<string, string | null> = Object.fromEntries(
-          groupMatches.filter(m => m.group === groupFilter).map(m => {
-            const mp = pred[m.id] as MatchPrediction | undefined;
-            return [m.id, mp?.outcome ?? null];
-          })
+          groupMatches.filter(m => m.group === groupFilter).map(m => [
+            m.id, pred?.matchPredictions[m.id]?.outcome ?? null,
+          ])
         );
         return (
           <>
@@ -100,8 +99,8 @@ export default function PredictionsTab({
               Group {groupFilter} — {activePlayers[pi] || `Player ${pi + 1}`}'s predictions
             </div>
             {groupMatches.filter(m => m.group === groupFilter).map(m => {
-              const mp = pred[m.id] as MatchPrediction | undefined ?? {};
-              const actual = results[m.id];
+              const mp = pred?.matchPredictions[m.id] ?? {};
+              const actual = results.matchResults[m.id];
               const outcome = mp.outcome;
               return (
                 <div key={m.id} className="match-row">
@@ -153,9 +152,9 @@ export default function PredictionsTab({
       {groupFilter === "BONUS" && (
         <div>
           {bonusQuestions.map(bq => {
-            const playerBonus = (predictions[pi]?.bonus as Record<string, string> | undefined)?.[bq.id] ?? "";
-            const isCorrect   = (predictions[pi]?.bonusCorrect as Record<string, boolean> | undefined)?.[bq.id] ?? false;
-            const actual      = (results.bonusAnswers as Record<string, string> | undefined)?.[bq.id];
+            const playerBonus = predictions[pi]?.bonus?.[bq.id] ?? "";
+            const isCorrect   = predictions[pi]?.bonusCorrect?.[bq.id] ?? false;
+            const actual      = results.bonusAnswers?.[bq.id];
             return (
               <div key={bq.id} style={{ marginBottom:16 }}>
                 <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:6 }}>

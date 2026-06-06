@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
-import type { MatchPrediction, TabName, AllPredictions, AllResults, MatchOutcome, ScoreBreakdown, TiebreakerData } from "./types/index.ts";
+import type { TabName, AllPredictions, AllResults, MatchOutcome, ScoreBreakdown } from "./types/index.ts";
 import { SCORING, MAX_PLAYERS, COLORS, TABS, WinnerPoints } from "./config.ts";
 import { THEME } from "./theme.ts";
 import { calcGroupStandings, getQualifiers, buildFirstKOBracket, FINAL_MATCH_ID, QUALIFICATION_ROUND_ID, THIRD_PLACE_COUNT } from "./bracketLogic.ts";
@@ -36,7 +36,7 @@ export default function App() {
   const [players, setPlayers]           = useState<string[]>(Array(MAX_PLAYERS).fill(""));
   const [numPlayers, setNumPlayers]     = useState(0);
   const [predictions, setPredictions]   = useState<AllPredictions>({});
-  const [results, setResults]           = useState<AllResults>({});
+  const [results, setResults]           = useState<AllResults>({ matchResults: {} });
   const [selectedPlayer, setSelectedPlayer] = useState(0);
   const [groupFilter, setGroupFilter]   = useState("A");
   const [loaded, setLoaded]             = useState(false);
@@ -183,9 +183,9 @@ export default function App() {
   function setPred(pi: number, matchId: string, side: string, val: MatchOutcome | null) {
     if (isLocked) return;
     setPredictions(prev => {
-      const prevPlayer = prev[pi] ?? {};
-      const prevMatch = prevPlayer[matchId] as MatchPrediction | undefined ?? {};
-      const next: AllPredictions = { ...prev, [pi]: { ...prevPlayer, [matchId]: { ...prevMatch, [side]: val } } };
+      const prevPlayer = prev[pi] ?? { matchPredictions: {} };
+      const prevMatch = prevPlayer.matchPredictions[matchId] ?? {};
+      const next: AllPredictions = { ...prev, [pi]: { ...prevPlayer, matchPredictions: { ...prevPlayer.matchPredictions, [matchId]: { ...prevMatch, [side]: val } } } };
       if (side === "outcome") getMatchPredSaver(players[pi], matchId)(val);
       return next;
     });
@@ -195,7 +195,7 @@ export default function App() {
     if (isLocked) return;
     setPredictions(prev => {
       const prevPlayer = prev[pi] ?? {};
-      const prevOrder = prevPlayer.tableOrder as Record<string, string[]> | undefined ?? {};
+      const prevOrder = prevPlayer.tableOrder ?? {};
       const next: AllPredictions = { ...prev, [pi]: { ...prevPlayer, tableOrder: { ...prevOrder, [group]: order } } };
       getTablePredSaver(players[pi], group)(order);
       return next;
@@ -206,7 +206,7 @@ export default function App() {
     if (isLocked) return;
     setPredictions(prev => {
       const prevPlayer = prev[pi] ?? {};
-      const prevBonus = prevPlayer.bonus as Record<string, string> | undefined ?? {};
+      const prevBonus = prevPlayer.bonus ?? {};
       const next: AllPredictions = { ...prev, [pi]: { ...prevPlayer, bonus: { ...prevBonus, [qid]: val } } };
       getBonusSaver(players[pi], qid)(val);
       return next;
@@ -226,7 +226,7 @@ export default function App() {
     if (isLocked) return;
     setPredictions(prev => {
       const prevPlayer = prev[pi] ?? {};
-      const prevKO = prevPlayer.knockoutWinners as Record<string, string | null> | undefined ?? {};
+      const prevKO = prevPlayer.knockoutWinners ?? {};
       const next: AllPredictions = { ...prev, [pi]: { ...prevPlayer, knockoutWinners: { ...prevKO, [matchId]: team } } };
       getKOPredSaver(players[pi], matchId)(team);
       return next;
@@ -236,8 +236,8 @@ export default function App() {
   // ── Result setters ─────────────────────────────────────────────────────────
   function setResult(matchId: string, side: string, val: string) {
     setResults(prev => {
-      const prevMatch = prev[matchId] as { home?: string; away?: string } | undefined ?? {};
-      const next: AllResults = { ...prev, [matchId]: { ...prevMatch, [side]: val } };
+      const prevMatch = prev.matchResults[matchId] ?? {};
+      const next: AllResults = { ...prev, matchResults: { ...prev.matchResults, [matchId]: { ...prevMatch, [side]: val } } };
       getMatchScoreSaver(matchId, side as "home" | "away")(val);
       return next;
     });
@@ -255,7 +255,7 @@ export default function App() {
   function setTiebreaker(group: string, type: string, team: string, val: number | undefined) {
     setResults(prev => {
       const prevTB = prev.tiebreakers ?? {};
-      const prevGroup = (prevTB as Record<string, Record<string, Record<string, number | undefined>>>)[group] ?? {};
+      const prevGroup = (prevTB[group] as Record<string, Record<string, number | undefined>> | undefined) ?? {};
       const prevType = prevGroup[type] ?? {};
       const next: AllResults = {
         ...prev,
@@ -271,7 +271,7 @@ export default function App() {
     if (pi < 0) return;
     setPredictions(prev => {
       const prevPlayer = prev[pi] ?? {};
-      const prevBC = prevPlayer.bonusCorrect as Record<string, boolean> | undefined ?? {};
+      const prevBC = prevPlayer.bonusCorrect ?? {};
       return { ...prev, [pi]: { ...prevPlayer, bonusCorrect: { ...prevBC, [qid]: isCorrect } } };
     });
     saveBonusIsCorrect(playerName, qid, isCorrect).catch(console.error);
@@ -282,8 +282,8 @@ export default function App() {
     const { groups, groupMatches, bonusQuestions, knockoutRounds } = tournamentConfig;
     let score = 0;
     groupMatches.forEach(m => {
-      const pred = predictions[pi]?.[m.id] as MatchPrediction | undefined;
-      score += pointsForOutcome(pred, results[m.id]);
+      const pred = predictions[pi]?.matchPredictions[m.id];
+      score += pointsForOutcome(pred, results.matchResults[m.id]);
     });
     Object.entries(groups).forEach(([g, teams]) => {
       if (!groupIsComplete(g, results)) return;
@@ -295,13 +295,13 @@ export default function App() {
       });
     });
     bonusQuestions.forEach(bq => {
-      const isCorrect = (predictions[pi]?.bonusCorrect as Record<string, boolean> | undefined)?.[bq.id];
+      const isCorrect = predictions[pi]?.bonusCorrect?.[bq.id];
       if (isCorrect === true) score += bq.pts;
     });
     if (knockoutRounds.length === 0) return score;
 
-    const koW    = (predictions[pi]?.knockoutWinners ?? {}) as Record<string, string | null>;
-    const actKoW = (results.knockoutWinners ?? {}) as Record<string, string | null>;
+    const koW    = predictions[pi]?.knockoutWinners ?? {};
+    const actKoW = results.knockoutWinners ?? {};
     const koTeams  = (ids: string[], src: Record<string, string | null>) =>
       new Set(ids.map(id => src[id]).filter((t): t is string => !!t));
     const overlap = (a: Set<string>, b: Set<string>) => [...a].filter(t => b.has(t)).length;
@@ -312,11 +312,11 @@ export default function App() {
       if (qualRound) {
         const allGroupsPredicted = Object.keys(groups).every(g => playerGroupIsComplete(pi, g, predictions));
         const allGroupsComplete  = Object.keys(groups).every(g => groupIsComplete(g, results));
-        const predThirdPlaces    = predictions[pi]?.thirdPlaces as string[] | undefined;
+        const predThirdPlaces    = predictions[pi]?.thirdPlaces;
         const thirdPlaceReady    = THIRD_PLACE_COUNT === 0 || predThirdPlaces?.length === THIRD_PLACE_COUNT;
         if (allGroupsPredicted && allGroupsComplete && thirdPlaceReady) {
           const actualQualTeams = new Set(
-            buildFirstKOBracket(getQualifiers(results), null, results.tiebreakers as Record<string, TiebreakerData> | undefined).flatMap(m => [m.home, m.away]).filter(t => t !== "3rd TBD")
+            buildFirstKOBracket(getQualifiers(results), null, results.tiebreakers).flatMap(m => [m.home, m.away]).filter(t => t !== "3rd TBD")
           );
           buildPredFirstKOBracket(pi, predictions).forEach(m => {
             if (m.home !== "3rd TBD" && actualQualTeams.has(m.home)) score += qualRound.pts;
@@ -349,8 +349,8 @@ export default function App() {
     knockout["Winner"] = 0;
 
     groupMatches.forEach(m => {
-      const pred = predictions[pi]?.[m.id] as MatchPrediction | undefined;
-      outcomes += pointsForOutcome(pred, results[m.id]);
+      const pred = predictions[pi]?.matchPredictions[m.id];
+      outcomes += pointsForOutcome(pred, results.matchResults[m.id]);
     });
     Object.entries(groups).forEach(([g, teams]) => {
       if (!groupIsComplete(g, results)) return;
@@ -362,13 +362,13 @@ export default function App() {
       });
     });
     bonusQuestions.forEach(bq => {
-      const isCorrect = (predictions[pi]?.bonusCorrect as Record<string, boolean> | undefined)?.[bq.id];
+      const isCorrect = predictions[pi]?.bonusCorrect?.[bq.id];
       if (isCorrect === true) bonus += bq.pts;
     });
 
     if (knockoutRounds.length > 0) {
-      const koW    = (predictions[pi]?.knockoutWinners ?? {}) as Record<string, string | null>;
-      const actKoW = (results.knockoutWinners ?? {}) as Record<string, string | null>;
+      const koW    = predictions[pi]?.knockoutWinners ?? {};
+      const actKoW = results.knockoutWinners ?? {};
       const koTeams  = (ids: string[], src: Record<string, string | null>) =>
         new Set(ids.map(id => src[id]).filter((t): t is string => !!t));
       const overlap = (a: Set<string>, b: Set<string>) => [...a].filter(t => b.has(t)).length;
@@ -379,11 +379,11 @@ export default function App() {
         if (qualRound) {
           const allGroupsPredicted = Object.keys(groups).every(g => playerGroupIsComplete(pi, g, predictions));
           const allGroupsComplete  = Object.keys(groups).every(g => groupIsComplete(g, results));
-          const predThirdPlaces    = predictions[pi]?.thirdPlaces as string[] | undefined;
+          const predThirdPlaces    = predictions[pi]?.thirdPlaces;
           const thirdPlaceReady    = THIRD_PLACE_COUNT === 0 || predThirdPlaces?.length === THIRD_PLACE_COUNT;
           if (allGroupsPredicted && allGroupsComplete && thirdPlaceReady) {
             const actualQualTeams = new Set(
-              buildFirstKOBracket(getQualifiers(results), null, results.tiebreakers as Record<string, TiebreakerData> | undefined).flatMap(m => [m.home, m.away]).filter(t => t !== "3rd TBD")
+              buildFirstKOBracket(getQualifiers(results), null, results.tiebreakers).flatMap(m => [m.home, m.away]).filter(t => t !== "3rd TBD")
             );
             buildPredFirstKOBracket(pi, predictions).forEach(m => {
               if (m.home !== "3rd TBD" && actualQualTeams.has(m.home)) knockout[QUALIFICATION_ROUND_ID!] += qualRound.pts;

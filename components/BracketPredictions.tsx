@@ -1,4 +1,4 @@
-import type { AllPredictions, AllResults, TiebreakerData } from "../types/index";
+import type { AllPredictions, AllResults } from "../types/index";
 import { useTournament, useFlag } from "../context/TournamentContext";
 import { THEME } from "../theme";
 import { buildFirstKOBracket, getKnockoutMatchup, getQualifiers, THIRD_PLACE_COUNT, QUALIFICATION_ROUND_ID, FINAL_MATCH_ID } from "../bracketLogic";
@@ -21,10 +21,10 @@ export default function BracketPredictions({
 }: BracketPredictionsProps) {
   const { groups, knockoutRounds } = useTournament();
   const flag = useFlag();
-  const pred       = predictions[pi] ?? {};
-  const thirdPicks = (pred.thirdPlaces as string[] | undefined) ?? [];
-  const koWinners  = (pred.knockoutWinners as Record<string, string | null> | undefined) ?? {};
-  const actKoW     = results.knockoutWinners as Record<string, string | null> | undefined ?? {};
+  const pred       = predictions[pi];
+  const thirdPicks = pred?.thirdPlaces ?? [];
+  const koWinners  = pred?.knockoutWinners ?? {};
+  const actKoW     = results.knockoutWinners ?? {};
 
   const predQ = buildPredQualifiers(pi, predictions);
   const thirds = Object.entries(groups).map(([g]) => ({
@@ -34,7 +34,7 @@ export default function BracketPredictions({
   const actualFirstKO = buildFirstKOBracket(
     getQualifiers(results),
     null,
-    results.tiebreakers as Record<string, TiebreakerData> | undefined,
+    results.tiebreakers,
   );
 
   const toggleThird = (g: string) => {

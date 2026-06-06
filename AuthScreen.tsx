@@ -55,7 +55,7 @@ export default function AuthScreen() {
 
   async function sendOtp(e: string) {
     setLoading(true);
-    const { error: err } = await supabase.auth.signInWithOtp({ email: e });
+    const { error: err } = await supabase.auth.signInWithOtp({ email: e, options: { emailRedirectTo: window.location.origin } });
     setLoading(false);
     if (err) {
       setError(err.message);

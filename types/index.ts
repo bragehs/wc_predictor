@@ -84,17 +84,13 @@ export interface MatchPrediction {
   outcome?: MatchOutcome | null;
 }
 
-// Predictions for one player. Named fields are strictly typed; the index
-// signature (keyed by match ID strings like "A1") returns unknown so that
-// TypeScript allows the mixed-value shape stored in Supabase without a
-// structural refactor. Cast to MatchPrediction at access sites.
 export interface PlayerPredictions {
+  matchPredictions: Record<string, MatchPrediction>;
   tableOrder?: Record<string, string[]>;
   bonus?: Record<string, string>;
   bonusCorrect?: Record<string, boolean>;
   thirdPlaces?: string[];
   knockoutWinners?: Record<string, string | null>;
-  [matchId: string]: unknown;
 }
 
 export type AllPredictions = Record<number, PlayerPredictions>;
@@ -111,13 +107,11 @@ export interface TiebreakerData {
   fifaRankings?: Record<string, number>;
 }
 
-// Same mixed-key pattern as PlayerPredictions: named fields typed, indexed
-// keys (match IDs, "bonus_<id>") return unknown. Cast at access sites.
 export interface AllResults {
+  matchResults: Record<string, MatchResult>;
   knockoutWinners?: Record<string, string | null>;
   tiebreakers?: Record<string, TiebreakerData>;
   bonusAnswers?: Record<string, string>;
-  [key: string]: unknown;
 }
 
 // ── Score breakdown ───────────────────────────────────────────────────────────
