@@ -1,0 +1,131 @@
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500&display=swap');
+
+* { box-sizing: border-box; }
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: #e8f5ec; }
+::-webkit-scrollbar-thumb { background: #a8d5be; border-radius: 2px; }
+
+.tab-btn {
+  border: none;
+  cursor: pointer;
+  font-family: 'Barlow Condensed', Arial;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 8px 14px;
+  transition: all 0.15s;
+  background: transparent;
+}
+
+.match-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #dcfce7 0%, #dbeafe 100%);
+  border: 1px solid #c2dfce;
+  margin-bottom: 5px;
+}
+
+.grp-btn {
+  border: none;
+  cursor: pointer;
+  font-family: 'Barlow Condensed', Arial;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 11px;
+  border-radius: 4px;
+  transition: all 0.15s;
+  letter-spacing: 1px;
+}
+
+.bonus-input {
+  width: 100%;
+  background: #f0fdf6;
+  border: 1.5px solid #93c9ac;
+  color: #0d2010;
+  font-size: 14px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  outline: none;
+  font-family: 'Barlow', Arial;
+}
+.bonus-input:focus { border-color: #d97706; }
+
+.hscroll { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+.hscroll::-webkit-scrollbar { height: 3px; }
+
+.pick-btn {
+  border: none;
+  cursor: pointer;
+  font-family: 'Barlow Condensed', Arial;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 10px;
+  border-radius: 6px;
+  transition: all 0.15s;
+  text-align: left;
+  width: 100%;
+}
+
+.ko-team {
+  flex: 1;
+  border: none;
+  cursor: pointer;
+  font-family: 'Barlow Condensed', Arial;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 5px;
+  transition: all 0.15s;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hub-btn {
+  border: none;
+  cursor: pointer;
+  font-family: 'Barlow Condensed', Arial;
+  font-size: 13px;
+  font-weight: 900;
+  padding: 5px 10px;
+  border-radius: 5px;
+  transition: all 0.15s;
+  letter-spacing: 1px;
+  min-width: 32px;
+}
+
+.sort-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #6b9678;
+  font-size: 13px;
+  padding: 1px 3px;
+  line-height: 1;
+  transition: color 0.1s;
+}
+.sort-btn:hover    { color: #2d5c3c; }
+.sort-btn:disabled { cursor: default; color: #93c9ac; }
+
+.score-input {
+  width: 36px;
+  height: 32px;
+  background: #f0fdf6;
+  border: 1.5px solid #93c9ac;
+  color: #0d2010;
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+  border-radius: 5px;
+  outline: none;
+  font-family: inherit;
+}
+.score-input:focus         { border-color: #2563eb; }
+.score-input.actual        { border-color: #2563eb; background: #eff6ff; }
+.score-input.actual:focus  { border-color: #2563eb; }

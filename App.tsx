@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import type { TabName, AllPredictions, AllResults, MatchOutcome, ScoreBreakdown } from "./types/index.ts";
@@ -9,27 +9,18 @@ import {
   groupIsComplete, playerGroupIsComplete, pointsForOutcome,
   getPredEffectiveOrder, buildPredFirstKOBracket,
 } from "./helpers.ts";
-import {
-  loadAllData, loadResults,
-  saveMatchPrediction, saveTablePrediction, saveBonusAnswer,
-  saveThirdPlacePicks, saveKnockoutPrediction,
-  saveMatchScore, saveKnockoutWinner, saveTiebreaker, saveBonusIsCorrect,
-} from "./db.ts";
+import { loadAllData, loadResults, saveBonusIsCorrect } from "./db.ts";
 import type { PlayerMeta } from "./db.ts";
 import AuthScreen from "./AuthScreen.tsx";
 import { initTournamentStore } from "./tournamentStore.ts";
 import { TournamentProvider } from "./context/TournamentContext.tsx";
 import type { TournamentConfig } from "./context/TournamentContext.tsx";
+import { useDebouncedSavers } from "./hooks/useDebouncedSavers.ts";
 import RulesTab       from "./tabs/RulesTab.tsx";
 import PredictionsTab from "./tabs/PredictionsTab.tsx";
 import ResultsTab     from "./tabs/ResultsTab.tsx";
 import StandingsTab   from "./tabs/StandingsTab.tsx";
 import SetupTab       from "./tabs/SetupTab.tsx";
-
-function debounce<T extends unknown[]>(fn: (...args: T) => void, ms: number) {
-  let t: ReturnType<typeof setTimeout>;
-  return (...args: T) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
-}
 
 export default function App() {
   const [tab, setTab]                   = useState<TabName>("Predictions");
@@ -62,74 +53,16 @@ export default function App() {
   const isLocked = !!(lockDate && new Date() > lockDate && !isAdmin);
   const isResultsLocked = resultsLocked && !isAdmin;
 
-  // ── Per-field debounced savers ─────────────────────────────────────────────
-  const matchPredSavers   = useRef({} as Record<string, (outcome: string | null) => void>);
-  const tablePredSavers   = useRef({} as Record<string, (teams: string[]) => void>);
-  const bonusSavers       = useRef({} as Record<string, (answer: string) => void>);
-  const thirdPlacesSavers = useRef({} as Record<string, (groups: string[]) => void>);
-  const koPredSavers      = useRef({} as Record<string, (winner: string | null) => void>);
-  const matchScoreSavers  = useRef({} as Record<string, (val: string) => void>);
-  const koWinnerSavers    = useRef({} as Record<string, (winner: string | null) => void>);
-  const tiebreakerSaver   = useMemo(() => debounce(
-    (g: string, t: string, team: string, val: number | undefined) =>
-      saveTiebreaker(g, t, team, val).catch(console.error),
-    1000
-  ), []);
-
-  function getMatchPredSaver(playerName: string, matchId: string) {
-    const key = `${playerName}::${matchId}`;
-    if (!matchPredSavers.current[key])
-      matchPredSavers.current[key] = debounce(
-        (outcome: string | null) => saveMatchPrediction(playerName, matchId, outcome).catch(console.error), 1200
-      );
-    return matchPredSavers.current[key];
-  }
-  function getTablePredSaver(playerName: string, groupId: string) {
-    const key = `${playerName}::${groupId}`;
-    if (!tablePredSavers.current[key])
-      tablePredSavers.current[key] = debounce(
-        (teams: string[]) => saveTablePrediction(playerName, groupId, teams).catch(console.error), 1200
-      );
-    return tablePredSavers.current[key];
-  }
-  function getBonusSaver(playerName: string, qid: string) {
-    const key = `${playerName}::${qid}`;
-    if (!bonusSavers.current[key])
-      bonusSavers.current[key] = debounce(
-        (answer: string) => saveBonusAnswer(playerName, qid, answer).catch(console.error), 1200
-      );
-    return bonusSavers.current[key];
-  }
-  function getThirdPlacesSaver(playerName: string) {
-    if (!thirdPlacesSavers.current[playerName])
-      thirdPlacesSavers.current[playerName] = debounce(
-        (groups: string[]) => saveThirdPlacePicks(playerName, groups).catch(console.error), 1200
-      );
-    return thirdPlacesSavers.current[playerName];
-  }
-  function getKOPredSaver(playerName: string, matchId: string) {
-    const key = `${playerName}::${matchId}`;
-    if (!koPredSavers.current[key])
-      koPredSavers.current[key] = debounce(
-        (winner: string | null) => saveKnockoutPrediction(playerName, matchId, winner).catch(console.error), 1200
-      );
-    return koPredSavers.current[key];
-  }
-  function getMatchScoreSaver(matchId: string, side: "home" | "away") {
-    const key = `${matchId}::${side}`;
-    if (!matchScoreSavers.current[key])
-      matchScoreSavers.current[key] = debounce(
-        (val: string) => saveMatchScore(matchId, side, val).catch(console.error), 1000
-      );
-    return matchScoreSavers.current[key];
-  }
-  function getKOWinnerSaver(matchId: string) {
-    if (!koWinnerSavers.current[matchId])
-      koWinnerSavers.current[matchId] = debounce(
-        (winner: string | null) => saveKnockoutWinner(matchId, winner).catch(console.error), 500
-      );
-    return koWinnerSavers.current[matchId];
-  }
+  const {
+    tiebreakerSaver,
+    getMatchPredSaver,
+    getTablePredSaver,
+    getBonusSaver,
+    getThirdPlacesSaver,
+    getKOPredSaver,
+    getMatchScoreSaver,
+    getKOWinnerSaver,
+  } = useDebouncedSavers();
 
   // ── Load ───────────────────────────────────────────────────────────────────
   function applyData(data: Awaited<ReturnType<typeof loadAllData>>) {
@@ -454,31 +387,6 @@ export default function App() {
   return (
     <TournamentProvider value={tournamentConfig}>
     <div style={{ minHeight:"100vh",background:THEME.bgPage,fontFamily:"'Barlow Condensed','Arial Narrow',Arial,sans-serif",color:THEME.textPrimary,paddingBottom:80 }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500&display=swap');
-        *{box-sizing:border-box;}
-        ::-webkit-scrollbar{width:4px;height:4px;}
-        ::-webkit-scrollbar-track{background:#e8f5ec;}
-        ::-webkit-scrollbar-thumb{background:${THEME.borderCard};border-radius:2px;}
-        .tab-btn{border:none;cursor:pointer;font-family:'Barlow Condensed',Arial;font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:8px 14px;transition:all 0.15s;background:transparent;}
-        .match-row{display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;background:${THEME.bgButton};border:1px solid ${THEME.borderMuted};margin-bottom:5px;}
-        .grp-btn{border:none;cursor:pointer;font-family:'Barlow Condensed',Arial;font-size:12px;font-weight:700;padding:5px 11px;border-radius:4px;transition:all 0.15s;letter-spacing:1px;}
-        .bonus-input{width:100%;background:${THEME.bgInput};border:1.5px solid ${THEME.borderInput};color:${THEME.textPrimary};font-size:14px;padding:7px 10px;border-radius:6px;outline:none;font-family:'Barlow',Arial;}
-        .bonus-input:focus{border-color:${THEME.gold};}
-        .hscroll{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;}
-        .hscroll::-webkit-scrollbar{height:3px;}
-        .pick-btn{border:none;cursor:pointer;font-family:'Barlow Condensed',Arial;font-size:12px;font-weight:700;padding:6px 10px;border-radius:6px;transition:all 0.15s;text-align:left;width:100%;}
-        .ko-team{flex:1;border:none;cursor:pointer;font-family:'Barlow Condensed',Arial;font-size:13px;font-weight:600;padding:6px 10px;border-radius:5px;transition:all 0.15s;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-        .hub-btn{border:none;cursor:pointer;font-family:'Barlow Condensed',Arial;font-size:13px;font-weight:900;padding:5px 10px;border-radius:5px;transition:all 0.15s;letter-spacing:1px;min-width:32px;}
-        .sort-btn{background:transparent;border:none;cursor:pointer;color:${THEME.textMuted};font-size:13px;padding:1px 3px;line-height:1;transition:color 0.1s;}
-        .sort-btn:hover{color:${THEME.textSecondary};}
-        .sort-btn:disabled{cursor:default;color:${THEME.borderInput};}
-        .score-input{width:36px;height:32px;background:${THEME.bgInput};border:1.5px solid ${THEME.borderInput};color:${THEME.textPrimary};font-size:16px;font-weight:700;text-align:center;border-radius:5px;outline:none;font-family:inherit;}
-        .score-input:focus{border-color:${THEME.blue};}
-        .score-input.actual{border-color:${THEME.blue};background:${THEME.blueBg};}
-        .score-input.actual:focus{border-color:${THEME.blue};}
-      `}</style>
-
       <div style={{ background:THEME.bgHeader,padding:"18px 16px 0",borderBottom:`1px solid ${THEME.borderHeader}` }}>
         <div style={{ maxWidth:760,margin:"0 auto" }}>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:6 }}>

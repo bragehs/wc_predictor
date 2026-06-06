@@ -4,6 +4,10 @@ import { useTournament, useFlag } from "../context/TournamentContext";
 import { THEME } from "../theme";
 import { pointsForOutcome } from "../helpers";
 import STitle from "../components/STitle";
+import SLabel from "../components/SLabel";
+import StatusBanner from "../components/StatusBanner";
+import PtsPill from "../components/PtsPill";
+import FilterBar from "../components/FilterBar";
 import PointsBadge from "../components/PointsBadge";
 import GroupTableEditable from "../components/GroupTableEditable";
 import BracketPredictions from "../components/BracketPredictions";
@@ -41,52 +45,52 @@ export default function PredictionsTab({
   const pi = showSwitcher ? selectedPlayer : myPlayerIndex;
   const isEditable = isAdmin || !isLocked;
 
+  const groupFilters = Object.keys(groups).map(g => ({ key: g, label: g, activeColor: THEME.gold, activeTextColor: "#000" }));
+  const extraFilters = [
+    { key: "BONUS",   label: "Bonus",   activeColor: THEME.purple, activeTextColor: "#fff" },
+    { key: "BRACKET", label: "Bracket", activeColor: THEME.red,    activeTextColor: "#fff" },
+  ];
+
   return (
     <div>
       <STitle>Predictions</STitle>
 
       {isLocked && (
-        <div style={{ background:THEME.bgCard,border:`1px solid ${THEME.blueBorder}`,borderRadius:8,padding:"10px 14px",marginBottom:14,fontSize:13,color:THEME.blue,fontFamily:"'Barlow',Arial" }}>
-          🔒 Predictions locked{lockDate ? ` since ${lockDate.toLocaleDateString("no-NO", {day:"numeric",month:"long",year:"numeric"})}` : ""}
-        </div>
+        <StatusBanner color="blue">
+          🔒 Predictions locked{lockDate
+            ? ` since ${lockDate.toLocaleDateString("no-NO", { day: "numeric", month: "long", year: "numeric" })}`
+            : ""}
+        </StatusBanner>
       )}
 
       {isAdmin && (
-        <div style={{ background:THEME.bgCard,border:`1px solid ${THEME.greenBorder}`,borderRadius:8,padding:"8px 14px",marginBottom:14,fontSize:12,color:THEME.green,fontFamily:"'Barlow',Arial" }}>
-          Admin mode — editing all predictions.
-        </div>
+        <StatusBanner color="green">Admin mode — editing all predictions.</StatusBanner>
       )}
 
       {showSwitcher && (
-        <div className="hscroll" style={{ marginBottom:12 }}>
+        <div className="hscroll" style={{ marginBottom: 12 }}>
           {activePlayers.map((p, i) => p ? (
-            <button key={i} className="grp-btn" onClick={() => setSelectedPlayer(i)}
-              style={{ background:pi===i?COLORS[i]:THEME.bgButton,color:pi===i?"#000":THEME.textSecondary,border:`1px solid ${pi===i?COLORS[i]:THEME.borderCard}`,flexShrink:0 }}>
+            <button
+              key={i}
+              className="grp-btn"
+              onClick={() => setSelectedPlayer(i)}
+              style={{
+                background: pi === i ? COLORS[i] : THEME.bgButton,
+                color:      pi === i ? "#000" : THEME.textSecondary,
+                border:     `1px solid ${pi === i ? COLORS[i] : THEME.borderCard}`,
+                flexShrink: 0,
+              }}
+            >
               {p || `P${i + 1}`}
             </button>
           ) : null)}
         </div>
       )}
 
-      <div style={{ display:"flex",gap:5,flexWrap:"wrap",marginBottom:12 }}>
-        {Object.keys(groups).map(g => (
-          <button key={g} className="grp-btn" onClick={() => setGroupFilter(g)}
-            style={{ background:groupFilter===g?THEME.gold:THEME.bgButton,color:groupFilter===g?"#000":THEME.textSecondary,border:`1px solid ${groupFilter===g?THEME.gold:THEME.borderCard}` }}>
-            {g}
-          </button>
-        ))}
-        <button className="grp-btn" onClick={() => setGroupFilter("BONUS")}
-          style={{ background:groupFilter==="BONUS"?THEME.purple:THEME.bgButton,color:groupFilter==="BONUS"?"#fff":THEME.textSecondary,border:`1px solid ${groupFilter==="BONUS"?THEME.purple:THEME.borderCard}` }}>
-          Bonus
-        </button>
-        <button className="grp-btn" onClick={() => setGroupFilter("BRACKET")}
-          style={{ background:groupFilter==="BRACKET"?THEME.red:THEME.bgButton,color:groupFilter==="BRACKET"?"#fff":THEME.textSecondary,border:`1px solid ${groupFilter==="BRACKET"?THEME.red:THEME.borderCard}` }}>
-          Bracket
-        </button>
-      </div>
+      <FilterBar filters={[...groupFilters, ...extraFilters]} active={groupFilter} onChange={setGroupFilter} />
 
       {groups[groupFilter] !== undefined && (() => {
-        const pred = predictions[pi];
+        const pred       = predictions[pi];
         const tableOrder = pred?.tableOrder;
         const outcomes: Record<string, string | null> = Object.fromEntries(
           groupMatches.filter(m => m.group === groupFilter).map(m => [
@@ -95,22 +99,28 @@ export default function PredictionsTab({
         );
         return (
           <>
-            <div style={{ fontSize:10,color:THEME.textFaint,letterSpacing:1,textTransform:"uppercase",marginBottom:8 }}>
+            <SLabel mb={8}>
               Group {groupFilter} — {activePlayers[pi] || `Player ${pi + 1}`}'s predictions
-            </div>
+            </SLabel>
             {groupMatches.filter(m => m.group === groupFilter).map(m => {
-              const mp = pred?.matchPredictions[m.id] ?? {};
-              const actual = results.matchResults[m.id];
+              const mp      = pred?.matchPredictions[m.id] ?? {};
+              const actual  = results.matchResults[m.id];
               const outcome = mp.outcome;
               return (
                 <div key={m.id} className="match-row">
-                  <span style={{ fontSize:10,color:THEME.textFaint,minWidth:42,flexShrink:0 }}>{m.date}</span>
-                  <span style={{ fontSize:12,flex:1,textAlign:"right",fontWeight:600,whiteSpace:"nowrap",color:THEME.textPrimary }}>{flag(m.home)} {m.home}</span>
-                  <div style={{ display:"flex",gap:3,flexShrink:0 }}>
-                    {(["H","D","A"] as const).map(val => {
+                  <span style={{ fontSize: 10, color: THEME.textFaint, minWidth: 42, flexShrink: 0 }}>
+                    {m.date}
+                  </span>
+                  <span style={{ fontSize: 12, flex: 1, textAlign: "right", fontWeight: 600, whiteSpace: "nowrap", color: THEME.textPrimary }}>
+                    {flag(m.home)} {m.home}
+                  </span>
+                  <div style={{ display: "flex", gap: 3, flexShrink: 0 }}>
+                    {(["H", "D", "A"] as const).map(val => {
                       const label = val === "H" ? "H" : val === "D" ? "U" : "B";
                       return (
-                        <button key={val} className="hub-btn"
+                        <button
+                          key={val}
+                          className="hub-btn"
                           onClick={() => isEditable && setPred(pi, m.id, "outcome", outcome === val ? null : val)}
                           style={{
                             background: outcome === val ? THEME.gold : THEME.bgInput,
@@ -118,24 +128,31 @@ export default function PredictionsTab({
                             border:     `1.5px solid ${outcome === val ? THEME.gold : THEME.borderInput}`,
                             cursor:     isEditable ? "pointer" : "default",
                             opacity:    isEditable ? 1 : 0.6,
-                          }}>
+                          }}
+                        >
                           {label}
                         </button>
                       );
                     })}
                   </div>
-                  <span style={{ fontSize:12,flex:1,fontWeight:600,whiteSpace:"nowrap",color:THEME.textPrimary }}>{flag(m.away)} {m.away}</span>
-                  <div style={{ width:28,flexShrink:0 }}>
-                    {actual != null && <PointsBadge pts={pointsForOutcome(mp, actual)}/>}
+                  <span style={{ fontSize: 12, flex: 1, fontWeight: 600, whiteSpace: "nowrap", color: THEME.textPrimary }}>
+                    {flag(m.away)} {m.away}
+                  </span>
+                  <div style={{ width: 28, flexShrink: 0 }}>
+                    {actual != null && <PointsBadge pts={pointsForOutcome(mp, actual)} />}
                   </div>
                 </div>
               );
             })}
-            <div style={{ marginTop:12 }}>
-              <div style={{ fontSize:10,color:THEME.textFaint,letterSpacing:1,textTransform:"uppercase",marginBottom:4 }}>
+            <div style={{ marginTop: 12 }}>
+              <SLabel mb={4}>
                 Predicted standings
-                {isEditable && <span style={{ color:THEME.borderCard,marginLeft:6,textTransform:"none",letterSpacing:0 }}>— ↑↓ swap tied teams</span>}
-              </div>
+                {isEditable && (
+                  <span style={{ color: THEME.borderCard, marginLeft: 6, textTransform: "none", letterSpacing: 0 }}>
+                    — ↑↓ swap tied teams
+                  </span>
+                )}
+              </SLabel>
               <GroupTableEditable
                 group={groupFilter}
                 teams={groups[groupFilter]}
@@ -156,20 +173,25 @@ export default function PredictionsTab({
             const isCorrect   = predictions[pi]?.bonusCorrect?.[bq.id] ?? false;
             const actual      = results.bonusAnswers?.[bq.id];
             return (
-              <div key={bq.id} style={{ marginBottom:16 }}>
-                <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:6 }}>
-                  <span style={{ fontSize:13,fontWeight:700,color:THEME.textPrimary }}>{bq.label}</span>
-                  <span style={{ fontSize:10,background:THEME.goldBg,color:THEME.gold,border:`1px solid ${THEME.goldBorder}`,borderRadius:4,padding:"1px 7px",fontWeight:700 }}>+{bq.pts} pts</span>
+              <div key={bq.id} style={{ marginBottom: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: THEME.textPrimary }}>{bq.label}</span>
+                  <PtsPill pts={bq.pts} color="gold" />
                 </div>
-                <div style={{ display:"flex",gap:8,alignItems:"center" }}>
-                  <input className="bonus-input" placeholder="Your answer…" value={playerBonus}
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    className="bonus-input"
+                    placeholder="Your answer…"
+                    value={playerBonus}
                     onChange={e => isEditable && setBonusPred(pi, bq.id, e.target.value)}
                     readOnly={!isEditable}
                     style={{ opacity: isEditable ? 1 : 0.6 }}
                   />
-                  {actual && <PointsBadge pts={isCorrect ? bq.pts : 0}/>}
+                  {actual && <PointsBadge pts={isCorrect ? bq.pts : 0} />}
                 </div>
-                {actual && <div style={{ fontSize:11,color:THEME.blue,marginTop:3 }}>Actual: {actual}</div>}
+                {actual && (
+                  <div style={{ fontSize: 11, color: THEME.blue, marginTop: 3 }}>Actual: {actual}</div>
+                )}
               </div>
             );
           })}
