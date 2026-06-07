@@ -1,23 +1,15 @@
 import { createContext, useContext } from "react";
-import type { GroupMatch, BonusQuestion, KnockoutRoundMeta } from "../types/index";
+import type { TournamentConfig } from "../types/index";
 
-export interface TournamentConfig {
-  groups: Record<string, string[]>;
-  groupMatches: GroupMatch[];
-  flags: Record<string, string>;
-  bonusQuestions: BonusQuestion[];
-  knockoutRounds: KnockoutRoundMeta[];
-}
+export type { TournamentConfig };
 
-const TournamentContext = createContext<TournamentConfig>({
+export const TournamentContext = createContext<TournamentConfig>({
   groups: {},
   groupMatches: [],
   flags: {},
   bonusQuestions: [],
   knockoutRounds: [],
 });
-
-export const TournamentProvider = TournamentContext.Provider;
 
 export function useTournament(): TournamentConfig {
   return useContext(TournamentContext);

@@ -1,21 +1,11 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
-import type { TabName, AllPredictions, AllResults, MatchOutcome, ScoreBreakdown } from "./types/index.ts";
-import { SCORING, MAX_PLAYERS, COLORS, TABS, WinnerPoints } from "./config.ts";
+import type { TabName } from "./types/index.ts";
 import { THEME } from "./theme.ts";
-import { calcGroupStandings, getQualifiers, buildFirstKOBracket, FINAL_MATCH_ID, QUALIFICATION_ROUND_ID, THIRD_PLACE_COUNT } from "./bracketLogic.ts";
-import {
-  groupIsComplete, playerGroupIsComplete, pointsForOutcome,
-  getPredEffectiveOrder, buildPredFirstKOBracket,
-} from "./helpers.ts";
-import { loadAllData, loadResults, saveBonusIsCorrect } from "./db.ts";
-import type { PlayerMeta } from "./db.ts";
 import AuthScreen from "./AuthScreen.tsx";
-import { initTournamentStore } from "./tournamentStore.ts";
-import { TournamentProvider } from "./context/TournamentContext.tsx";
-import type { TournamentConfig } from "./context/TournamentContext.tsx";
-import { useDebouncedSavers } from "./hooks/useDebouncedSavers.ts";
+import { GameProvider } from "./context/GameContext.tsx";
+import AppHeader from "./components/AppHeader.tsx";
 import RulesTab       from "./tabs/RulesTab.tsx";
 import PredictionsTab from "./tabs/PredictionsTab.tsx";
 import ResultsTab     from "./tabs/ResultsTab.tsx";
@@ -23,472 +13,39 @@ import StandingsTab   from "./tabs/StandingsTab.tsx";
 import SetupTab       from "./tabs/SetupTab.tsx";
 
 export default function App() {
-  const [tab, setTab]                   = useState<TabName>("Predictions");
-  const [players, setPlayers]           = useState<string[]>(Array(MAX_PLAYERS).fill(""));
-  const [numPlayers, setNumPlayers]     = useState(0);
-  const [predictions, setPredictions]   = useState<AllPredictions>({});
-  const [results, setResults]           = useState<AllResults>({ matchResults: {} });
-  const [selectedPlayer, setSelectedPlayer] = useState(0);
-  const [groupFilter, setGroupFilter]   = useState("A");
-  const [loaded, setLoaded]             = useState(false);
-  const [lockDate, setLockDate]         = useState<Date | null>(null);
-  const [resultsLocked, setResultsLocked] = useState(false);
-  const [session, setSession]           = useState<Session | null>(null);
-  const [authChecked, setAuthChecked]   = useState(false);
-  const [playersMeta, setPlayersMeta]   = useState<PlayerMeta[]>([]);
-  const [tournamentConfig, setTournamentConfig] = useState<TournamentConfig>({
-    groups: {}, groupMatches: [], flags: {}, bonusQuestions: [], knockoutRounds: [],
-  });
-
-  const myPlayerMeta = useMemo(
-    () => session?.user?.email ? playersMeta.find(p => p.email === session.user.email) ?? null : null,
-    [session, playersMeta]
-  );
-  const myPlayer = myPlayerMeta?.approved ? myPlayerMeta : null;
-  const isAdmin = myPlayer?.isAdmin ?? false;
-  const myPlayerIndex = useMemo(
-    () => myPlayer ? players.indexOf(myPlayer.name) : 0,
-    [myPlayer, players]
-  );
-  const isLocked = !!(lockDate && new Date() > lockDate && !isAdmin);
-  const isResultsLocked = resultsLocked && !isAdmin;
-
-  const {
-    tiebreakerSaver,
-    getMatchPredSaver,
-    getTablePredSaver,
-    getBonusSaver,
-    getThirdPlacesSaver,
-    getKOPredSaver,
-    getMatchScoreSaver,
-    getKOWinnerSaver,
-  } = useDebouncedSavers();
-
-  // ── Load ───────────────────────────────────────────────────────────────────
-  function applyData(data: Awaited<ReturnType<typeof loadAllData>>) {
-    const cfg = data.tournamentConfig;
-    initTournamentStore(cfg.groups, cfg.groupMatches, cfg.flags);
-    setTournamentConfig(cfg);
-    setPlayers([...data.players, ...Array(MAX_PLAYERS - data.players.length).fill("")]);
-    setNumPlayers(data.players.length);
-    setLockDate(data.lockDate);
-    setResultsLocked(data.resultsLocked);
-    setResults(data.results);
-    setPredictions(data.predictions);
-    setPlayersMeta(data.playersMeta);
-  }
+  const [tab, setTab]         = useState<TabName>("Predictions");
+  const [session, setSession] = useState<Session | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setAuthChecked(true);
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
-      setSession(s);
-    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
     return () => subscription.unsubscribe();
   }, []);
 
-  useEffect(() => {
-    loadAllData().then(data => {
-      applyData(data);
-      setLoaded(true);
-    }).catch(e => {
-      console.error("Supabase load error:", e);
-      setLoaded(true);
-    });
-  }, []);
-
-  // ── Poll results every 60s ─────────────────────────────────────────────────
-  useEffect(() => {
-    if (!loaded) return;
-    const refresh = async () => {
-      try { setResults(await loadResults()); } catch(_e) {}
-    };
-    const interval = setInterval(refresh, 60000);
-    window.addEventListener("focus", refresh);
-    return () => { clearInterval(interval); window.removeEventListener("focus", refresh); };
-  }, [loaded]);
-
-  const activePlayers = players.slice(0, numPlayers);
-
-  // ── Prediction setters ─────────────────────────────────────────────────────
-  function setPred(pi: number, matchId: string, side: string, val: MatchOutcome | null) {
-    if (isLocked) return;
-    setPredictions(prev => {
-      const prevPlayer = prev[pi] ?? { matchPredictions: {} };
-      const prevMatch = prevPlayer.matchPredictions[matchId] ?? {};
-      const next: AllPredictions = { ...prev, [pi]: { ...prevPlayer, matchPredictions: { ...prevPlayer.matchPredictions, [matchId]: { ...prevMatch, [side]: val } } } };
-      if (side === "outcome") getMatchPredSaver(players[pi], matchId)(val);
-      return next;
-    });
-  }
-
-  function setTableOrder(pi: number, group: string, order: string[]) {
-    if (isLocked) return;
-    setPredictions(prev => {
-      const prevPlayer = prev[pi] ?? {};
-      const prevOrder = prevPlayer.tableOrder ?? {};
-      const next: AllPredictions = { ...prev, [pi]: { ...prevPlayer, tableOrder: { ...prevOrder, [group]: order } } };
-      getTablePredSaver(players[pi], group)(order);
-      return next;
-    });
-  }
-
-  function setBonusPred(pi: number, qid: string, val: string) {
-    if (isLocked) return;
-    setPredictions(prev => {
-      const prevPlayer = prev[pi] ?? {};
-      const prevBonus = prevPlayer.bonus ?? {};
-      const next: AllPredictions = { ...prev, [pi]: { ...prevPlayer, bonus: { ...prevBonus, [qid]: val } } };
-      getBonusSaver(players[pi], qid)(val);
-      return next;
-    });
-  }
-
-  function setThirdPlacesPred(pi: number, groups: string[]) {
-    if (isLocked) return;
-    setPredictions(prev => {
-      const next: AllPredictions = { ...prev, [pi]: { ...prev[pi], thirdPlaces: groups } };
-      getThirdPlacesSaver(players[pi])(groups);
-      return next;
-    });
-  }
-
-  function setKnockoutWinnerPred(pi: number, matchId: string, team: string | null) {
-    if (isLocked) return;
-    setPredictions(prev => {
-      const prevPlayer = prev[pi] ?? {};
-      const prevKO = prevPlayer.knockoutWinners ?? {};
-      const next: AllPredictions = { ...prev, [pi]: { ...prevPlayer, knockoutWinners: { ...prevKO, [matchId]: team } } };
-      getKOPredSaver(players[pi], matchId)(team);
-      return next;
-    });
-  }
-
-  // ── Result setters ─────────────────────────────────────────────────────────
-  function setResult(matchId: string, side: string, val: string) {
-    setResults(prev => {
-      const prevMatch = prev.matchResults[matchId] ?? {};
-      const next: AllResults = { ...prev, matchResults: { ...prev.matchResults, [matchId]: { ...prevMatch, [side]: val } } };
-      getMatchScoreSaver(matchId, side as "home" | "away")(val);
-      return next;
-    });
-  }
-
-  function setKnockoutWinnerResult(matchId: string, team: string | null) {
-    setResults(prev => {
-      const prevKO = prev.knockoutWinners ?? {};
-      const next: AllResults = { ...prev, knockoutWinners: { ...prevKO, [matchId]: team } };
-      getKOWinnerSaver(matchId)(team);
-      return next;
-    });
-  }
-
-  function setTiebreaker(group: string, type: string, team: string, val: number | undefined) {
-    setResults(prev => {
-      const prevTB = prev.tiebreakers ?? {};
-      const prevGroup = (prevTB[group] as Record<string, Record<string, number | undefined>> | undefined) ?? {};
-      const prevType = prevGroup[type] ?? {};
-      const next: AllResults = {
-        ...prev,
-        tiebreakers: { ...prevTB, [group]: { ...prevGroup, [type]: { ...prevType, [team]: val } } },
-      };
-      tiebreakerSaver(group, type, team, val);
-      return next;
-    });
-  }
-
-  function setBonusIsCorrect(playerName: string, qid: string, isCorrect: boolean) {
-    const pi = players.indexOf(playerName);
-    if (pi < 0) return;
-    setPredictions(prev => {
-      const prevPlayer = prev[pi] ?? {};
-      const prevBC = prevPlayer.bonusCorrect ?? {};
-      return { ...prev, [pi]: { ...prevPlayer, bonusCorrect: { ...prevBC, [qid]: isCorrect } } };
-    });
-    saveBonusIsCorrect(playerName, qid, isCorrect).catch(console.error);
-  }
-
-  // ── Scoring ────────────────────────────────────────────────────────────────
-  function calcScore(pi: number): number {
-    const { groups, groupMatches, bonusQuestions, knockoutRounds } = tournamentConfig;
-    let score = 0;
-    groupMatches.forEach(m => {
-      const pred = predictions[pi]?.matchPredictions[m.id];
-      score += pointsForOutcome(pred, results.matchResults[m.id]);
-    });
-    Object.entries(groups).forEach(([g, teams]) => {
-      if (!groupIsComplete(g, results)) return;
-      if (!playerGroupIsComplete(pi, g, predictions)) return;
-      const predOrder = getPredEffectiveOrder(pi, g, predictions).map(r => r.team);
-      const actualS   = calcGroupStandings(g, teams, results);
-      predOrder.forEach((team, idx) => {
-        if (actualS[idx]?.team === team) score += SCORING.tablePosition;
-      });
-    });
-    bonusQuestions.forEach(bq => {
-      const isCorrect = predictions[pi]?.bonusCorrect?.[bq.id];
-      if (isCorrect === true) score += bq.pts;
-    });
-    if (knockoutRounds.length === 0) return score;
-
-    const koW    = predictions[pi]?.knockoutWinners ?? {};
-    const actKoW = results.knockoutWinners ?? {};
-    const koTeams  = (ids: string[], src: Record<string, string | null>) =>
-      new Set(ids.map(id => src[id]).filter((t): t is string => !!t));
-    const overlap = (a: Set<string>, b: Set<string>) => [...a].filter(t => b.has(t)).length;
-
-    // Group-stage qualification scoring (who made it into the first KO round)
-    if (QUALIFICATION_ROUND_ID) {
-      const qualRound = knockoutRounds.find(r => r.id === QUALIFICATION_ROUND_ID);
-      if (qualRound) {
-        const allGroupsPredicted = Object.keys(groups).every(g => playerGroupIsComplete(pi, g, predictions));
-        const allGroupsComplete  = Object.keys(groups).every(g => groupIsComplete(g, results));
-        const predThirdPlaces    = predictions[pi]?.thirdPlaces;
-        const thirdPlaceReady    = THIRD_PLACE_COUNT === 0 || predThirdPlaces?.length === THIRD_PLACE_COUNT;
-        if (allGroupsPredicted && allGroupsComplete && thirdPlaceReady) {
-          const actualQualTeams = new Set(
-            buildFirstKOBracket(getQualifiers(results), null, results.tiebreakers).flatMap(m => [m.home, m.away]).filter(t => t !== "3rd TBD")
-          );
-          buildPredFirstKOBracket(pi, predictions).forEach(m => {
-            if (m.home !== "3rd TBD" && actualQualTeams.has(m.home)) score += qualRound.pts;
-            if (m.away !== "3rd TBD" && actualQualTeams.has(m.away)) score += qualRound.pts;
-          });
-        }
-      }
-    }
-
-    // Round advancement scoring: winning round[i] earns round[i+1].pts
-    for (let i = 0; i < knockoutRounds.length - 1; i++) {
-      const cur  = knockoutRounds[i];
-      const next = knockoutRounds[i + 1];
-      score += overlap(koTeams(cur.matchIds, koW), koTeams(cur.matchIds, actKoW)) * next.pts;
-    }
-
-    // Winner bonus
-    if (koW[FINAL_MATCH_ID] && actKoW[FINAL_MATCH_ID] && koW[FINAL_MATCH_ID] === actKoW[FINAL_MATCH_ID]) {
-      score += WinnerPoints;
-    }
-
-    return score;
-  }
-
-  function calcScoreBreakdown(pi: number): ScoreBreakdown {
-    const { groups, groupMatches, bonusQuestions, knockoutRounds } = tournamentConfig;
-    let outcomes = 0, table = 0, bonus = 0;
-    const knockout: Record<string, number> = {};
-    knockoutRounds.forEach(r => { knockout[r.id] = 0; });
-    knockout["Winner"] = 0;
-
-    groupMatches.forEach(m => {
-      const pred = predictions[pi]?.matchPredictions[m.id];
-      outcomes += pointsForOutcome(pred, results.matchResults[m.id]);
-    });
-    Object.entries(groups).forEach(([g, teams]) => {
-      if (!groupIsComplete(g, results)) return;
-      if (!playerGroupIsComplete(pi, g, predictions)) return;
-      const predOrder = getPredEffectiveOrder(pi, g, predictions).map(r => r.team);
-      const actualS   = calcGroupStandings(g, teams, results);
-      predOrder.forEach((team, idx) => {
-        if (actualS[idx]?.team === team) table += SCORING.tablePosition;
-      });
-    });
-    bonusQuestions.forEach(bq => {
-      const isCorrect = predictions[pi]?.bonusCorrect?.[bq.id];
-      if (isCorrect === true) bonus += bq.pts;
-    });
-
-    if (knockoutRounds.length > 0) {
-      const koW    = predictions[pi]?.knockoutWinners ?? {};
-      const actKoW = results.knockoutWinners ?? {};
-      const koTeams  = (ids: string[], src: Record<string, string | null>) =>
-        new Set(ids.map(id => src[id]).filter((t): t is string => !!t));
-      const overlap = (a: Set<string>, b: Set<string>) => [...a].filter(t => b.has(t)).length;
-
-      // Group-stage qualification scoring
-      if (QUALIFICATION_ROUND_ID) {
-        const qualRound = knockoutRounds.find(r => r.id === QUALIFICATION_ROUND_ID);
-        if (qualRound) {
-          const allGroupsPredicted = Object.keys(groups).every(g => playerGroupIsComplete(pi, g, predictions));
-          const allGroupsComplete  = Object.keys(groups).every(g => groupIsComplete(g, results));
-          const predThirdPlaces    = predictions[pi]?.thirdPlaces;
-          const thirdPlaceReady    = THIRD_PLACE_COUNT === 0 || predThirdPlaces?.length === THIRD_PLACE_COUNT;
-          if (allGroupsPredicted && allGroupsComplete && thirdPlaceReady) {
-            const actualQualTeams = new Set(
-              buildFirstKOBracket(getQualifiers(results), null, results.tiebreakers).flatMap(m => [m.home, m.away]).filter(t => t !== "3rd TBD")
-            );
-            buildPredFirstKOBracket(pi, predictions).forEach(m => {
-              if (m.home !== "3rd TBD" && actualQualTeams.has(m.home)) knockout[QUALIFICATION_ROUND_ID!] += qualRound.pts;
-              if (m.away !== "3rd TBD" && actualQualTeams.has(m.away)) knockout[QUALIFICATION_ROUND_ID!] += qualRound.pts;
-            });
-          }
-        }
-      }
-
-      // Round advancement scoring
-      for (let i = 0; i < knockoutRounds.length - 1; i++) {
-        const cur  = knockoutRounds[i];
-        const next = knockoutRounds[i + 1];
-        knockout[next.id] = overlap(koTeams(cur.matchIds, koW), koTeams(cur.matchIds, actKoW)) * next.pts;
-      }
-
-      // Winner bonus
-      if (koW[FINAL_MATCH_ID] && actKoW[FINAL_MATCH_ID] && koW[FINAL_MATCH_ID] === actKoW[FINAL_MATCH_ID]) {
-        knockout["Winner"] = WinnerPoints;
-      }
-    }
-
-    return { outcomes, table, bonus, knockout };
-  }
-
-  const scores = activePlayers.map((_, i) => calcScore(i));
-
   if (!authChecked) return (
-    <div style={{ display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:THEME.bgPage,color:THEME.textPrimary,fontFamily:"monospace" }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: THEME.bgPage, color: THEME.textPrimary, fontFamily: "monospace" }}>
       Loading...
     </div>
   );
 
   if (!session) return <AuthScreen />;
 
-  if (loaded && !myPlayer) {
-    const isPending = !!myPlayerMeta && !myPlayerMeta.approved;
-    return (
-      <div style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100vh",background:THEME.bgPage,color:THEME.textPrimary,fontFamily:"'Barlow Condensed',Arial",gap:16,textAlign:"center",padding:24 }}>
-        {isPending ? (
-          <>
-            <div style={{ fontSize:18,fontWeight:700 }}>Registration pending</div>
-            <div style={{ fontSize:14,color:THEME.textMuted,fontFamily:"'Barlow',Arial" }}>
-              Your registration as <strong>{myPlayerMeta!.name}</strong> is waiting for admin approval.
-            </div>
-          </>
-        ) : (
-          <>
-            <div style={{ fontSize:18,fontWeight:700 }}>Not registered</div>
-            <div style={{ fontSize:14,color:THEME.textMuted,fontFamily:"'Barlow',Arial" }}>
-              <strong>{session.user.email}</strong> is not linked to any player.
-            </div>
-          </>
-        )}
-        <button onClick={() => supabase.auth.signOut()} style={{ background:THEME.red,border:"none",borderRadius:6,padding:"8px 20px",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:13,fontFamily:"inherit" }}>
-          Sign out
-        </button>
-      </div>
-    );
-  }
-
-  if (!loaded) return (
-    <div style={{ display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:THEME.bgPage,color:THEME.textPrimary,fontFamily:"monospace" }}>
-      Loading...
-    </div>
-  );
-
   return (
-    <TournamentProvider value={tournamentConfig}>
-    <div style={{ minHeight:"100vh",background:THEME.bgPage,fontFamily:"'Barlow Condensed','Arial Narrow',Arial,sans-serif",color:THEME.textPrimary,paddingBottom:80 }}>
-      <div style={{ background:THEME.bgHeader,padding:"18px 16px 0",borderBottom:`1px solid ${THEME.borderHeader}` }}>
-        <div style={{ maxWidth:760,margin:"0 auto" }}>
-          <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:6 }}>
-            <div>
-              <div style={{ fontSize:20,fontWeight:900,letterSpacing:2,textTransform:"uppercase",lineHeight:1,color:THEME.headerText }}>FIFA World Cup 2026</div>
-              <div style={{ fontSize:11,color:THEME.headerSubtext,letterSpacing:3,textTransform:"uppercase",fontWeight:600 }}>Prediction Tracker</div>
-            </div>
-            <div style={{ display:"flex",alignItems:"center",gap:8 }}>
-              {isAdmin && <div style={{ fontSize:10,color:THEME.headerSubtext,letterSpacing:1,fontWeight:700,background:"rgba(255,255,255,0.15)",borderRadius:4,padding:"2px 8px" }}>ADMIN</div>}
-              <button onClick={() => supabase.auth.signOut()} style={{ fontSize:10,color:THEME.headerMuted,background:"none",border:"1px solid rgba(255,255,255,0.25)",borderRadius:4,padding:"2px 8px",cursor:"pointer",fontFamily:"inherit",letterSpacing:1,fontWeight:700 }}>
-                SIGN OUT
-              </button>
-            </div>
-          </div>
-          {activePlayers.some(p => p) && (
-            <div className="hscroll" style={{ marginTop:8 }}>
-              {activePlayers.map((p, i) => p ? (
-                <div key={i} style={{ flexShrink:0,background:"rgba(255,255,255,0.15)",backdropFilter:"blur(4px)",border:"1.5px solid rgba(255,255,255,0.3)",borderRadius:8,padding:"4px 10px",minWidth:70,textAlign:"center" }}>
-                  <div style={{ fontSize:11,fontWeight:700,color:COLORS[i],whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:80 }}>{p}</div>
-                  <div style={{ fontSize:20,fontWeight:900,color:THEME.headerText,lineHeight:1 }}>{scores[i]}</div>
-                  <div style={{ fontSize:9,color:THEME.headerMuted,letterSpacing:1 }}>PTS</div>
-                </div>
-              ) : null)}
-            </div>
-          )}
-          <div style={{ display:"flex",gap:0,marginTop:4,overflowX:"auto" }}>
-            {TABS.map(t => (
-              <button key={t} className="tab-btn" onClick={() => setTab(t)}
-                style={{ color:tab===t?THEME.headerTabActive:THEME.headerMuted,borderBottom:tab===t?`2px solid ${THEME.headerTabActive}`:"2px solid transparent",flexShrink:0 }}>
-                {t}
-              </button>
-            ))}
-            {isAdmin && (
-              <button className="tab-btn" onClick={() => setTab("Setup")}
-                style={{ color:tab==="Setup"?THEME.headerTabActive:THEME.headerMuted,borderBottom:tab==="Setup"?`2px solid ${THEME.headerTabActive}`:"2px solid transparent",flexShrink:0 }}>
-                Setup
-              </button>
-            )}
-          </div>
+    <GameProvider session={session}>
+      <div style={{ minHeight: "100vh", background: THEME.bgPage, fontFamily: "'Barlow Condensed','Arial Narrow',Arial,sans-serif", color: THEME.textPrimary, paddingBottom: 80 }}>
+        <AppHeader tab={tab} setTab={setTab} />
+        <div style={{ maxWidth: 760, margin: "0 auto", padding: "16px 12px" }}>
+          {tab === "Rules"       && <RulesTab />}
+          {tab === "Predictions" && <PredictionsTab />}
+          {tab === "Results"     && <ResultsTab />}
+          {tab === "Standings"   && <StandingsTab />}
+          {tab === "Setup"       && <SetupTab />}
         </div>
       </div>
-
-      <div style={{ maxWidth:760,margin:"0 auto",padding:"16px 12px" }}>
-        {tab === "Rules" && <RulesTab/>}
-
-        {tab === "Predictions" && (
-          <PredictionsTab
-            activePlayers={activePlayers}
-            selectedPlayer={selectedPlayer}
-            setSelectedPlayer={setSelectedPlayer}
-            myPlayerIndex={myPlayerIndex}
-            groupFilter={groupFilter}
-            setGroupFilter={setGroupFilter}
-            predictions={predictions}
-            results={results}
-            setPred={setPred}
-            setTableOrder={setTableOrder}
-            setBonusPred={setBonusPred}
-            setThirdPlacesPred={setThirdPlacesPred}
-            setKnockoutWinnerPred={setKnockoutWinnerPred}
-            isAdmin={isAdmin}
-            isLocked={isLocked}
-            lockDate={lockDate}
-          />
-        )}
-
-        {tab === "Results" && (
-          <ResultsTab
-            groupFilter={groupFilter}
-            setGroupFilter={setGroupFilter}
-            results={results}
-            setResult={setResult}
-            setKnockoutWinnerResult={setKnockoutWinnerResult}
-            setTiebreaker={setTiebreaker}
-            isLocked={isResultsLocked}
-            predLocked={isLocked}
-            isAdmin={isAdmin}
-            activePlayers={activePlayers}
-            predictions={predictions}
-            setBonusIsCorrect={setBonusIsCorrect}
-          />
-        )}
-
-{tab === "Standings" && (
-          <StandingsTab
-            activePlayers={activePlayers}
-            scores={scores}
-            calcScoreBreakdown={calcScoreBreakdown}
-          />
-        )}
-
-        {tab === "Setup" && isAdmin && (
-          <SetupTab
-            activePlayers={activePlayers}
-            playersMeta={playersMeta}
-            lockDate={lockDate}
-            resultsLocked={resultsLocked}
-            onReload={() => loadAllData().then(applyData).catch(console.error)}
-          />
-        )}
-      </div>
-    </div>
-    </TournamentProvider>
+    </GameProvider>
   );
 }

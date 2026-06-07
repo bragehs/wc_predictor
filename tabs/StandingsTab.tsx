@@ -1,48 +1,45 @@
-import type { ScoreBreakdown } from "../types/index";
 import { COLORS } from "../config";
 import { THEME } from "../theme";
+import { useGame } from "../context/GameContext";
 import STitle from "../components/STitle";
 
-interface StandingsTabProps {
-  activePlayers: string[];
-  scores: number[];
-  calcScoreBreakdown: (pi: number) => ScoreBreakdown;
-}
+export default function StandingsTab() {
+  const { activePlayers, scores, calcScoreBreakdown } = useGame();
 
-export default function StandingsTab({ activePlayers, scores, calcScoreBreakdown }: StandingsTabProps) {
   const rows = activePlayers
     .map((p, i) => ({ name: p, score: scores[i], idx: i, bd: calcScoreBreakdown(i) }))
     .filter(p => p.name)
     .sort((a, b) => b.score - a.score);
 
-  const koTotal = (bd: ScoreBreakdown) => Object.values(bd.knockout).reduce((s, v) => s + v, 0);
+  const koTotal = (bd: ReturnType<typeof calcScoreBreakdown>) =>
+    Object.values(bd.knockout).reduce((s, v) => s + v, 0);
 
   const th = (extra: React.CSSProperties): React.CSSProperties => ({
-    padding:"9px 12px", fontWeight:600, fontSize:10, letterSpacing:1,
-    textTransform:"uppercase", color:THEME.textMuted, borderBottom:`1px solid ${THEME.borderCard}`,
-    background:THEME.bgInset, ...extra,
+    padding: "9px 12px", fontWeight: 600, fontSize: 10, letterSpacing: 1,
+    textTransform: "uppercase", color: THEME.textMuted, borderBottom: `1px solid ${THEME.borderCard}`,
+    background: THEME.bgInset, ...extra,
   });
   const td = (extra: React.CSSProperties): React.CSSProperties => ({
-    padding:"10px 12px", borderTop:`1px solid ${THEME.borderFaint}`, fontSize:13, ...extra,
+    padding: "10px 12px", borderTop: `1px solid ${THEME.borderFaint}`, fontSize: 13, ...extra,
   });
 
   return (
     <div>
       <STitle>Leaderboard</STitle>
       {rows.length === 0 ? (
-        <div style={{ color:THEME.textMuted,fontSize:14 }}>No players configured yet.</div>
+        <div style={{ color: THEME.textMuted, fontSize: 14 }}>No players configured yet.</div>
       ) : (
-        <div style={{ overflowX:"auto" }}>
-          <table style={{ width:"100%",borderCollapse:"collapse",fontSize:13 }}>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr>
-                <th style={th({ textAlign:"left",width:32 })}>#</th>
-                <th style={th({ textAlign:"left" })}>Player</th>
-                <th style={th({ textAlign:"right" })}>Enkeltkamper</th>
-                <th style={th({ textAlign:"right" })}>Tabellplassering</th>
-                <th style={th({ textAlign:"right" })}>Lag med seg i sluttspill</th>
-                <th style={th({ textAlign:"right" })}>Bonus</th>
-                <th style={th({ textAlign:"right", color:THEME.gold })}>Total</th>
+                <th style={th({ textAlign: "left", width: 32 })}>#</th>
+                <th style={th({ textAlign: "left" })}>Player</th>
+                <th style={th({ textAlign: "right" })}>Enkeltkamper</th>
+                <th style={th({ textAlign: "right" })}>Tabellplassering</th>
+                <th style={th({ textAlign: "right" })}>Lag med seg i sluttspill</th>
+                <th style={th({ textAlign: "right" })}>Bonus</th>
+                <th style={th({ textAlign: "right", color: THEME.gold })}>Total</th>
               </tr>
             </thead>
             <tbody>
@@ -50,15 +47,15 @@ export default function StandingsTab({ activePlayers, scores, calcScoreBreakdown
                 const ko = koTotal(p.bd);
                 return (
                   <tr key={p.idx} style={{ background: rank % 2 === 0 ? THEME.bgRow : THEME.bgRowAlt }}>
-                    <td style={td({ color:THEME.textMuted,fontSize:11 })}>{rank + 1}</td>
+                    <td style={td({ color: THEME.textMuted, fontSize: 11 })}>{rank + 1}</td>
                     <td style={td({})}>
-                      <span style={{ color:COLORS[p.idx],fontWeight:700 }}>{p.name}</span>
+                      <span style={{ color: COLORS[p.idx], fontWeight: 700 }}>{p.name}</span>
                     </td>
-                    <td style={td({ textAlign:"right",color:THEME.textSecondary })}>{p.bd.outcomes}</td>
-                    <td style={td({ textAlign:"right",color:THEME.textSecondary })}>{p.bd.table}</td>
-                    <td style={td({ textAlign:"right",color:THEME.textSecondary })}>{ko}</td>
-                    <td style={td({ textAlign:"right",color:THEME.textSecondary })}>{p.bd.bonus}</td>
-                    <td style={td({ textAlign:"right",fontWeight:900,fontSize:17,color:THEME.gold })}>{p.score}</td>
+                    <td style={td({ textAlign: "right", color: THEME.textSecondary })}>{p.bd.outcomes}</td>
+                    <td style={td({ textAlign: "right", color: THEME.textSecondary })}>{p.bd.table}</td>
+                    <td style={td({ textAlign: "right", color: THEME.textSecondary })}>{ko}</td>
+                    <td style={td({ textAlign: "right", color: THEME.textSecondary })}>{p.bd.bonus}</td>
+                    <td style={td({ textAlign: "right", fontWeight: 900, fontSize: 17, color: THEME.gold })}>{p.score}</td>
                   </tr>
                 );
               })}

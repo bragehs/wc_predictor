@@ -1,3 +1,13 @@
+// ── Tournament config ─────────────────────────────────────────────────────────
+
+export interface TournamentConfig {
+  groups: Record<string, string[]>;
+  groupMatches: GroupMatch[];
+  flags: Record<string, string>;
+  bonusQuestions: BonusQuestion[];
+  knockoutRounds: KnockoutRoundMeta[];
+}
+
 // ── Domain primitives ─────────────────────────────────────────────────────────
 
 export type MatchOutcome = "H" | "D" | "A";

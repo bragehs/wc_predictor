@@ -2,35 +2,13 @@ import { useState, useEffect } from "react";
 import { THEME } from "../../theme";
 import SetupSection from "../../components/SetupSection";
 import { saveSettings } from "../../db";
+import { inputStyle, btnStyle } from "./setupStyles";
 
 interface SettingsSectionProps {
   lockDate: Date | null;
   resultsLocked: boolean;
   onReload: () => Promise<void>;
 }
-
-const inputStyle: React.CSSProperties = {
-  background: THEME.bgInput,
-  border: `1.5px solid ${THEME.borderInput}`,
-  color: THEME.textPrimary,
-  fontSize: 13,
-  padding: "6px 10px",
-  borderRadius: 6,
-  outline: "none",
-  fontFamily: "inherit",
-};
-
-const btnStyle = (color: string): React.CSSProperties => ({
-  background: color,
-  border: "none",
-  borderRadius: 5,
-  padding: "5px 12px",
-  fontSize: 12,
-  fontWeight: 700,
-  cursor: "pointer",
-  fontFamily: "'Barlow Condensed', Arial",
-  color: "#000",
-});
 
 function toLocalStr(d: Date) {
   const off = d.getTimezoneOffset() * 60000;
