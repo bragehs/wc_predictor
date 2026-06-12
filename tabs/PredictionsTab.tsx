@@ -42,22 +42,38 @@ export default function PredictionsTab() {
       )}
 
       {showSwitcher && (
-        <div className="hscroll" style={{ marginBottom: 12 }}>
-          {activePlayers.map((p, i) => p ? (
-            <button
-              key={i}
-              className="grp-btn"
-              onClick={() => setSelectedPlayer(i)}
-              style={{
-                background: pi === i ? COLORS[i] : THEME.bgButton,
-                color:      pi === i ? "#000"     : THEME.textSecondary,
-                border:     `1px solid ${pi === i ? COLORS[i] : THEME.borderCard}`,
-                flexShrink: 0,
-              }}
-            >
-              {p || `P${i + 1}`}
-            </button>
-          ) : null)}
+        <div style={{ marginBottom: 12 }}>
+          <button
+            className="grp-btn"
+            onClick={() => setSelectedPlayer(myPlayerIndex)}
+            style={{
+              width:      "100%",
+              background: pi === myPlayerIndex ? COLORS[myPlayerIndex] : THEME.bgButton,
+              color:      pi === myPlayerIndex ? "#000" : THEME.textSecondary,
+              border:     `1px solid ${pi === myPlayerIndex ? COLORS[myPlayerIndex] : THEME.borderCard}`,
+              marginBottom: 6,
+            }}
+          >
+            {activePlayers[myPlayerIndex] || `P${myPlayerIndex + 1}`}
+            <span style={{ fontSize: 10, fontWeight: 700, opacity: 0.6, marginLeft: 6, letterSpacing: 1, textTransform: "uppercase" }}>you</span>
+          </button>
+          <div className="hscroll">
+            {activePlayers.map((p, i) => i === myPlayerIndex || !p ? null : (
+              <button
+                key={i}
+                className="grp-btn"
+                onClick={() => setSelectedPlayer(i)}
+                style={{
+                  background: pi === i ? COLORS[i] : THEME.bgButton,
+                  color:      pi === i ? "#000"     : THEME.textSecondary,
+                  border:     `1px solid ${pi === i ? COLORS[i] : THEME.borderCard}`,
+                  flexShrink: 0,
+                }}
+              >
+                {p || `P${i + 1}`}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

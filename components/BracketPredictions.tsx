@@ -28,7 +28,9 @@ export default function BracketPredictions({
 
   const predQ = buildPredQualifiers(pi, predictions);
   const thirds = Object.entries(groups).map(([g]) => ({
-    group: g, team: predQ[g]?.third ?? `3rd ${g}`,
+    group: g,
+    team: predQ[g]?.third ?? `3rd ${g}`,
+    pts: predQ[g]?.row?.pts ?? 0,
   }));
   const firstKO = buildFirstKOBracket(predQ, thirdPicks.length === THIRD_PLACE_COUNT ? thirdPicks : null);
   const actualFirstKO = buildFirstKOBracket(
@@ -79,6 +81,18 @@ export default function BracketPredictions({
           <div style={{ fontSize:12,color:thirdPicks.length===8?THEME.green:THEME.gold,fontWeight:700 }}>
             {thirdPicks.length}/8 selected
           </div>
+        </div>
+        <div style={{ background:THEME.bgCard,border:`1px solid ${THEME.borderCard}`,borderRadius:6,marginBottom:8,overflow:"hidden" }}>
+          {[...thirds].sort((a,b) => b.pts - a.pts).map(({ group, team, pts }, i, arr) => {
+            const sel = thirdPicks.includes(group);
+            return (
+              <div key={group} style={{ display:"flex",alignItems:"center",gap:8,padding:"5px 10px",background:sel?THEME.goldBg:"transparent",opacity:sel?1:0.45,borderBottom:i<arr.length-1?`1px solid ${THEME.borderCard}`:"none" }}>
+                <span style={{ fontSize:11,color:THEME.textMuted,fontWeight:700,minWidth:18,letterSpacing:1 }}>{group}</span>
+                <span style={{ flex:1,fontSize:13,fontWeight:700,color:sel?THEME.gold:THEME.textSecondary,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{flag(team)} {team}</span>
+                <span style={{ fontSize:12,fontWeight:700,color:sel?THEME.gold:THEME.textMuted,minWidth:40,textAlign:"right" }}>{pts} pts</span>
+              </div>
+            );
+          })}
         </div>
         <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:5 }}>
           {thirds.map(({ group, team }) => {
