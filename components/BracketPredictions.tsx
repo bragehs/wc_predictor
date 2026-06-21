@@ -136,7 +136,6 @@ export default function BracketPredictions({
               return (
                 <div key={mid} style={{ marginBottom:5 }}>
                   <div style={{ display:"flex",alignItems:"center",gap:5 }}>
-                    <span style={{ fontSize:11,color:THEME.textFaint,minWidth:38,fontWeight:700 }}>{mid}</span>
                     <button className="ko-team" onClick={() => bothKnown && pickKO(mid, home)}
                       style={{ background:winner===home?THEME.gold:THEME.bgButton,border:`1px solid ${winner===home?THEME.gold:THEME.borderCard}`,color:winner===home?"#000":THEME.textSecondary,cursor:(bothKnown&&isEditable)?"pointer":"default",opacity:!bothKnown?0.5:1 }}>
                       {flag(home)} {home}
