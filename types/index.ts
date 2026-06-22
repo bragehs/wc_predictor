@@ -13,7 +13,7 @@ export interface TournamentConfig {
 
 export type MatchOutcome = "H" | "D" | "A";
 export type GroupLetter = string;
-export type TabName = "Rules" | "Predictions" | "Results" | "Standings" | "Setup";
+export type TabName = "Rules" | "Predictions" | "Live" | "Results" | "Standings" | "Setup";
 
 // ── Static data shapes ────────────────────────────────────────────────────────
 

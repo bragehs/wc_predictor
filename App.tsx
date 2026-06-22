@@ -8,6 +8,7 @@ import { GameProvider } from "./context/GameContext.tsx";
 import AppHeader from "./components/AppHeader.tsx";
 import RulesTab       from "./tabs/RulesTab.tsx";
 import PredictionsTab from "./tabs/PredictionsTab.tsx";
+import LiveTab        from "./tabs/LiveTab.tsx";
 import ResultsTab     from "./tabs/ResultsTab.tsx";
 import StandingsTab   from "./tabs/StandingsTab.tsx";
 import SetupTab       from "./tabs/SetupTab.tsx";
@@ -41,6 +42,7 @@ export default function App() {
         <div style={{ maxWidth: 760, margin: "0 auto", padding: "16px 12px" }}>
           {tab === "Rules"       && <RulesTab />}
           {tab === "Predictions" && <PredictionsTab />}
+          {tab === "Live"        && <LiveTab />}
           {tab === "Results"     && <ResultsTab />}
           {tab === "Standings"   && <StandingsTab />}
           {tab === "Setup"       && <SetupTab />}

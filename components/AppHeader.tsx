@@ -1,5 +1,6 @@
+import { useRef, useEffect } from "react";
 import type { TabName } from "../types/index";
-import { TABS, COLORS } from "../config";
+import { COLORS } from "../config";
 import { THEME } from "../theme";
 import { supabase } from "../supabase";
 import { useGame } from "../context/GameContext";
@@ -10,7 +11,42 @@ interface AppHeaderProps {
 }
 
 export default function AppHeader({ tab, setTab }: AppHeaderProps) {
-  const { activePlayers, scores, isAdmin } = useGame();
+  const { activePlayers, scores, isAdmin, isLocked } = useGame();
+
+  // Switch to Live tab on first load once predictions are locked
+  const defaultApplied = useRef(false);
+  useEffect(() => {
+    if (isLocked && !defaultApplied.current) {
+      defaultApplied.current = true;
+      setTab("Live");
+    }
+  }, [isLocked, setTab]);
+
+  const visibleTabs: TabName[] = [
+    "Rules",
+    ...(isLocked ? (["Live"] as TabName[]) : []),
+    "Predictions",
+    "Results",
+    "Standings",
+  ];
+
+  function tabBtn(t: TabName, label?: string) {
+    const active = tab === t;
+    return (
+      <button
+        key={t}
+        className="tab-btn"
+        onClick={() => setTab(t)}
+        style={{
+          color: active ? THEME.headerTabActive : THEME.headerMuted,
+          borderBottom: active ? `2px solid ${THEME.headerTabActive}` : "2px solid transparent",
+          flexShrink: 0,
+        }}
+      >
+        {label ?? t}
+      </button>
+    );
+  }
 
   return (
     <div style={{ background: THEME.bgHeader, padding: "18px 16px 0", borderBottom: `1px solid ${THEME.borderHeader}` }}>
@@ -53,25 +89,8 @@ export default function AppHeader({ tab, setTab }: AppHeaderProps) {
         )}
 
         <div style={{ display: "flex", gap: 0, marginTop: 4, overflowX: "auto" }}>
-          {TABS.map(t => (
-            <button
-              key={t}
-              className="tab-btn"
-              onClick={() => setTab(t)}
-              style={{ color: tab === t ? THEME.headerTabActive : THEME.headerMuted, borderBottom: tab === t ? `2px solid ${THEME.headerTabActive}` : "2px solid transparent", flexShrink: 0 }}
-            >
-              {t}
-            </button>
-          ))}
-          {isAdmin && (
-            <button
-              className="tab-btn"
-              onClick={() => setTab("Setup")}
-              style={{ color: tab === "Setup" ? THEME.headerTabActive : THEME.headerMuted, borderBottom: tab === "Setup" ? `2px solid ${THEME.headerTabActive}` : "2px solid transparent", flexShrink: 0 }}
-            >
-              Setup
-            </button>
-          )}
+          {visibleTabs.map(t => tabBtn(t))}
+          {isAdmin && tabBtn("Setup")}
         </div>
 
       </div>
