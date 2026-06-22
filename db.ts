@@ -17,6 +17,7 @@ export interface TournamentConfigData {
   flags: Record<string, string>;
   bonusQuestions: BonusQuestion[];
   knockoutRounds: KnockoutRoundMeta[];
+  matchDates: Record<string, string>;
 }
 
 export interface AppData {
@@ -99,7 +100,11 @@ export async function loadAllData(): Promise<AppData> {
     matchIds: ROUND_MATCH_IDS[r.id] ?? [],
   }));
 
-  const tournamentConfig: TournamentConfigData = { groups: groupsMap, groupMatches: groupMatchesList, flags, bonusQuestions, knockoutRounds };
+  const matchDates: Record<string, string> = {};
+  ((matchRows ?? []) as Array<{ id: string; date: string | null }>)
+    .forEach(m => { if (m.date) matchDates[m.id] = m.date; });
+
+  const tournamentConfig: TournamentConfigData = { groups: groupsMap, groupMatches: groupMatchesList, flags, bonusQuestions, knockoutRounds, matchDates };
 
   // ── Build predictions ─────────────────────────────────────────────────────
   const predsObj: AllPredictions = {};

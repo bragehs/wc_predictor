@@ -8,7 +8,7 @@ import ThirdPlaceTiebreakerSection from "../../components/ThirdPlaceTiebreakerSe
 
 export default function KnockoutResultsSection() {
   const { results, setKnockoutWinnerResult, setTiebreaker, isResultsLocked } = useGame();
-  const { knockoutRounds } = useTournament();
+  const { knockoutRounds, matchDates } = useTournament();
   const flag = useFlag();
   const isLocked = isResultsLocked;
 
@@ -28,7 +28,7 @@ export default function KnockoutResultsSection() {
             </div>
             <PtsPill pts={round.pts} color="blue" />
           </div>
-          {round.matchIds.map(mid => {
+          {[...round.matchIds].sort((a, b) => (matchDates[a] ?? "").localeCompare(matchDates[b] ?? "")).map(mid => {
             const { home, away } = getKnockoutMatchup(mid, firstKOBracket, koWinners);
             const winner    = koWinners[mid] ?? null;
             const bothKnown = !home.startsWith("W(") && home !== "TBD" && !away.startsWith("W(") && away !== "TBD";

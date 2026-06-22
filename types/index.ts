@@ -6,6 +6,7 @@ export interface TournamentConfig {
   flags: Record<string, string>;
   bonusQuestions: BonusQuestion[];
   knockoutRounds: KnockoutRoundMeta[];
+  matchDates: Record<string, string>;
 }
 
 // ── Domain primitives ─────────────────────────────────────────────────────────

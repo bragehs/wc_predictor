@@ -17,9 +17,6 @@ export default function GroupResultsSection() {
         const actual = results.matchResults[m.id] ?? {};
         return (
           <div key={m.id} className="match-row">
-            <span style={{ fontSize: 10, color: THEME.textFaint, minWidth: 42, flexShrink: 0 }}>
-              {m.date}
-            </span>
             <span style={{ fontSize: 12, flex: 1, textAlign: "right", fontWeight: 600, whiteSpace: "nowrap", color: THEME.textPrimary }}>
               {flag(m.home)} {m.home}
             </span>

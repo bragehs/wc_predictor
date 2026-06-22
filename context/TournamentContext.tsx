@@ -9,6 +9,7 @@ export const TournamentContext = createContext<TournamentConfig>({
   flags: {},
   bonusQuestions: [],
   knockoutRounds: [],
+  matchDates: {},
 });
 
 export function useTournament(): TournamentConfig {

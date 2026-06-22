@@ -72,7 +72,7 @@ export function GameProvider({ session, children }: GameProviderProps) {
   const [groupFilter, setGroupFilter] = useState("A");
 
   const [tournamentConfig, setTournamentConfig] = useState<TournamentConfig>({
-    groups: {}, groupMatches: [], flags: {}, bonusQuestions: [], knockoutRounds: [],
+    groups: {}, groupMatches: [], flags: {}, bonusQuestions: [], knockoutRounds: [], matchDates: {},
   });
 
   const [players, setPlayers]         = useState<string[]>(Array(MAX_PLAYERS).fill(""));

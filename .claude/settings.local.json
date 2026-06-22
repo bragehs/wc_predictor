@@ -14,7 +14,8 @@
       "WebFetch(domain:www.theguardian.com)",
       "WebFetch(domain:sportmonks.com)",
       "Bash(npm run *)",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "WebFetch(domain:worldcupwiki.com)"
     ]
   }
 }

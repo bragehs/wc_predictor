@@ -38,7 +38,9 @@ export default function FixturesSection({ groupMatches, onReload }: FixturesSect
           <div key={m.id} style={rowStyle}>
             <span style={{ fontSize: 11, color: THEME.textFaint, minWidth: 32 }}>{m.id}</span>
             <span style={{ flex: 1, color: THEME.textPrimary, fontSize: 12 }}>{m.home} vs {m.away}</span>
-            <span style={{ fontSize: 11, color: THEME.textMuted, minWidth: 40 }}>{m.date}</span>
+            <span style={{ fontSize: 11, color: THEME.textMuted, minWidth: 40 }}>
+              {m.date ? new Date(m.date).toLocaleString("no-NO", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Oslo" }) : "—"}
+            </span>
             <button style={btnStyle(THEME.red)} onClick={() => handleDeleteFixture(m.id)}>✕</button>
           </div>
         ))}
@@ -48,7 +50,7 @@ export default function FixturesSection({ groupMatches, onReload }: FixturesSect
         <input style={{ ...inputStyle, width: 110 }} placeholder="Home"       value={matchHome}  onChange={e => setMatchHome(e.target.value)} />
         <input style={{ ...inputStyle, width: 110 }} placeholder="Away"       value={matchAway}  onChange={e => setMatchAway(e.target.value)} />
         <input style={{ ...inputStyle, width: 50  }} placeholder="Grp"        value={matchGroup} onChange={e => setMatchGroup(e.target.value)} />
-        <input style={{ ...inputStyle, width: 70  }} placeholder="Jun 11"     value={matchDate}  onChange={e => setMatchDate(e.target.value)} />
+        <input style={{ ...inputStyle, width: 130 }} type="datetime-local"     value={matchDate}  onChange={e => setMatchDate(e.target.value)} />
         <button style={btnStyle(THEME.green)} onClick={handleAddFixture}>Add</button>
       </div>
     </SetupSection>
