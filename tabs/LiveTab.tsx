@@ -41,7 +41,7 @@ export default function LiveTab() {
   return (
     <div>
       <STitle>{knockoutMode ? "Knockout" : "Today's Matches"}</STitle>
-      {knockoutMode ? <KnockoutSurvivalView /> : <GroupDayView todayStart={todayStart} todayEnd={todayEnd} />}
+      {knockoutMode ? <KnockoutSurvivalView todayStart={todayStart} todayEnd={todayEnd} /> : <GroupDayView todayStart={todayStart} todayEnd={todayEnd} />}
     </div>
   );
 }
